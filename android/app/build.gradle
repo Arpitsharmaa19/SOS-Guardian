@@ -9,7 +9,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.sos_app"
+    namespace = "com.sosguardian.app"
     compileSdkVersion 34
     ndkVersion = flutter.ndkVersion
 
@@ -23,7 +23,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.sos_app"
+        applicationId = "com.sosguardian.app"
 
         minSdkVersion 23
         targetSdkVersion 34

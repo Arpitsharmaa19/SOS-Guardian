@@ -23,18 +23,15 @@ allprojects {
 rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
-    project.evaluationDependsOn(":app")
-}
 
-subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            if (project.android.namespace == null) {
-                // Determine a safe namespace if missing
-                project.android.namespace = project.group ?: "com.sosguardian.${project.name.replace('-', '.')}"
-            }
+    // Directly set namespace if missing using the library plugin ID
+    project.pluginManager.withPlugin("com.android.library") {
+        if (project.android.namespace == null) {
+            project.android.namespace = "com.sosguardian.${project.name.replace('-', '.')}"
         }
     }
+
+    project.evaluationDependsOn(":app")
 }
 
 tasks.register("clean", Delete) {
