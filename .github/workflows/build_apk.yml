@@ -27,6 +27,10 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Patch broken dependencies (AGP 8.0+ fix)
+        run: |
+          find $HOME/.pub-cache -name "AndroidManifest.xml" -exec sed -i 's/package="com.shounakmulay.telephony"//g' {} +
+
       - name: Build APK (Release)
         run: flutter build apk --release --no-tree-shake-icons --android-skip-build-dependency-validation
 
