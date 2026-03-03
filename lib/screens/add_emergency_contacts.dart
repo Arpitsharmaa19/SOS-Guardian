@@ -1,108 +1,92 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'add_emergency_contacts.dart';
 
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+class AddEmergencyContactsScreen extends StatefulWidget {
+  const AddEmergencyContactsScreen({super.key});
 
-  void _logout(BuildContext context) async {
-    await FirebaseAuth.instance.signOut();
-    Navigator.pushReplacementNamed(
-        context, '/login'); // Adjust based on your routing
+  @override
+  State<AddEmergencyContactsScreen> createState() => _AddEmergencyContactsScreenState();
+}
+
+class _AddEmergencyContactsScreenState extends State<AddEmergencyContactsScreen> {
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  bool _isLoading = false;
+
+  Future<void> _addContact() async {
+    final name = _nameController.text.trim();
+    final phone = _phoneController.text.trim();
+
+    if (name.isEmpty || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter both name and phone number')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'contactList': {
+            name: phone,
+          }
+        }, SetOptions(merge: true));
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Contact added successfully!')),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error adding contact: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => _logout(context),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Add Emergency Contact')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Emergency Contacts:',
-              style: TextStyle(
-                fontSize: 18.0,
-                fontWeight: FontWeight.bold,
-              ),
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: 'Contact Name'),
             ),
             const SizedBox(height: 10),
-            Expanded(
-              child: StreamBuilder<DocumentSnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(user?.uid)
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
-                  }
-
-                  final contacts = snapshot.data?.get('contactList') ?? {};
-                  if (contacts.isEmpty) {
-                    return const Center(
-                        child: Text('No emergency contacts added.'));
-                  }
-
-                  return ListView.builder(
-                    itemCount: contacts.length,
-                    itemBuilder: (context, index) {
-                      final contactName = contacts.keys.elementAt(index);
-                      final contactNumber = contacts[contactName];
-
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 8.0),
-                        elevation: 3.0,
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: Theme.of(context).primaryColor,
-                            child: Text(
-                              contactName[0].toUpperCase(),
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ),
-                          title: Text(contactName),
-                          subtitle: Text(contactNumber),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
+            TextField(
+              controller: _phoneController,
+              decoration: const InputDecoration(labelText: 'Phone Number'),
+              keyboardType: TextInputType.phone,
             ),
             const SizedBox(height: 20),
-            Center(
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) =>
-                            const AddEmergencyContactsScreen()),
-                  );
-                },
-                icon: const Icon(Icons.add),
-                label: const Text('Add Emergency Contact'),
-              ),
-            ),
+            _isLoading
+                ? const CircularProgressIndicator()
+                : ElevatedButton(
+                    onPressed: _addContact,
+                    child: const Text('Save Contact'),
+                  ),
           ],
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
   }
 }
