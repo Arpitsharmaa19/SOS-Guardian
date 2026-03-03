@@ -26,6 +26,17 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            if (project.android.namespace == null) {
+                // Determine a safe namespace if missing
+                project.android.namespace = project.group ?: "com.sosguardian.${project.name.replace('-', '.')}"
+            }
+        }
+    }
+}
+
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
