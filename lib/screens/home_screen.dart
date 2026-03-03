@@ -9,6 +9,7 @@ import 'package:location/location.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:telephony/telephony.dart';
+import '../services/whatsapp_service.dart';
 
 final logger = Logger();
 
@@ -229,11 +230,15 @@ class HomeScreenState extends State<HomeScreen> {
           'SOS Alert! I need help immediately. My current location: $locationLink';
 
       for (final contact in contacts) {
+        // 1. Send Standard SMS
         await telephony.sendSms(
           to: contact,
           message: message,
           isMultipart: true,
         );
+
+        // 2. Send WhatsApp Alert (via Render Backend)
+        await WhatsAppService.sendWhatsAppAlert(contact, message);
       }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('SOS messages sent successfully!')),
