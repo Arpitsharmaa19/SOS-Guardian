@@ -8,6 +8,12 @@
       "languageVersion": "3.2"
     },
     {
+      "name": "animate_do",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/animate_do-4.2.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.1"
+    },
+    {
       "name": "ansicolor",
       "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/ansicolor-2.0.3",
       "packageUri": "lib/",
@@ -201,9 +207,15 @@
     },
     {
       "name": "flutter_sms",
-      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/flutter_sms-2.3.3",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/flutter_sms-3.0.1",
       "packageUri": "lib/",
-      "languageVersion": "2.12"
+      "languageVersion": "3.5"
+    },
+    {
+      "name": "flutter_staggered_animations",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/flutter_staggered_animations-1.1.1",
+      "packageUri": "lib/",
+      "languageVersion": "2.17"
     },
     {
       "name": "flutter_test",
@@ -254,6 +266,12 @@
       "languageVersion": "2.15"
     },
     {
+      "name": "google_fonts",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/google_fonts-8.0.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.9"
+    },
+    {
       "name": "html",
       "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/html-0.15.5",
       "packageUri": "lib/",
@@ -276,6 +294,12 @@
       "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/image-4.5.2",
       "packageUri": "lib/",
       "languageVersion": "3.0"
+    },
+    {
+      "name": "intl",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/intl-0.20.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
     },
     {
       "name": "js",
@@ -354,6 +378,42 @@
       "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/path-1.9.1",
       "packageUri": "lib/",
       "languageVersion": "3.4"
+    },
+    {
+      "name": "path_provider",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/path_provider-2.1.5",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
+      "name": "path_provider_android",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/path_provider_android-2.2.22",
+      "packageUri": "lib/",
+      "languageVersion": "3.9"
+    },
+    {
+      "name": "path_provider_foundation",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/path_provider_foundation-2.5.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.9"
+    },
+    {
+      "name": "path_provider_linux",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/path_provider_linux-2.2.1",
+      "packageUri": "lib/",
+      "languageVersion": "2.19"
+    },
+    {
+      "name": "path_provider_platform_interface",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/path_provider_platform_interface-2.1.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
+      "name": "path_provider_windows",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/path_provider_windows-2.3.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
     },
     {
       "name": "pedantic",
@@ -567,33 +627,15 @@
     },
     {
       "name": "web",
-      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/web-1.1.0",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/web-1.1.1",
       "packageUri": "lib/",
       "languageVersion": "3.4"
     },
     {
-      "name": "webview_flutter",
-      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/webview_flutter-4.13.1",
+      "name": "xdg_directories",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/xdg_directories-1.1.0",
       "packageUri": "lib/",
-      "languageVersion": "3.8"
-    },
-    {
-      "name": "webview_flutter_android",
-      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/webview_flutter_android-4.10.13",
-      "packageUri": "lib/",
-      "languageVersion": "3.9"
-    },
-    {
-      "name": "webview_flutter_platform_interface",
-      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/webview_flutter_platform_interface-2.14.0",
-      "packageUri": "lib/",
-      "languageVersion": "3.6"
-    },
-    {
-      "name": "webview_flutter_wkwebview",
-      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/webview_flutter_wkwebview-3.23.8",
-      "packageUri": "lib/",
-      "languageVersion": "3.9"
+      "languageVersion": "3.3"
     },
     {
       "name": "xml",
@@ -608,7 +650,7 @@
       "languageVersion": "3.4"
     },
     {
-      "name": "VoiceAid",
+      "name": "sos_guardian",
       "rootUri": "../",
       "packageUri": "lib/",
       "languageVersion": "3.5"

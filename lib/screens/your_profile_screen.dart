@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:animate_do/animate_do.dart';
+import '../utils/app_theme.dart';
 
 class YourProfileScreen extends StatefulWidget {
   const YourProfileScreen({super.key});
@@ -16,12 +18,9 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
   final _emailController = TextEditingController();
   final _contactController = TextEditingController();
   final _addressController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
 
   bool _isLoading = true;
-  bool _isPasswordVisible = false;
-  bool _isConfirmPasswordVisible = false;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -31,203 +30,192 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
 
   Future<void> _loadProfileData() async {
     try {
-      // Get the current user
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        throw Exception('No user logged in.');
-      }
+      if (user == null) return;
 
-      // Fetch user details from Firestore
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .get();
 
-      if (!doc.exists) {
-        throw Exception('User details not found.');
+      if (doc.exists) {
+        final data = doc.data()!;
+        _nameController.text = data['name'] ?? '';
+        _emailController.text = data['email'] ?? '';
+        _contactController.text = data['phone'] ?? ''; // Fixed to 'phone' as per registration
+        _addressController.text = data['address'] ?? '';
       }
 
-      // Populate the controllers with fetched data
-      final data = doc.data()!;
-      _nameController.text = data['name'] ?? '';
-      _emailController.text = data['email'] ?? '';
-      _contactController.text = data['contact'] ?? '';
-      _addressController.text = data['address'] ?? '';
-      // Note: Passwords won't be fetched for security reasons
-
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load details: $e')),
-      );
+      setState(() => _isLoading = false);
+      _showSnackBar('Failed to load profile: $e', AppTheme.emergencyColor);
     }
   }
 
   Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
-    if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passwords do not match')),
-      );
-      return;
-    }
-
+    setState(() => _isSaving = true);
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        throw Exception('No user logged in.');
-      }
+      if (user == null) return;
 
-      // Update user details in Firestore
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .update({
         'name': _nameController.text.trim(),
-        'contact': _contactController.text.trim(),
+        'phone': _contactController.text.trim(),
         'address': _addressController.text.trim(),
       });
 
-      // Update email and password if changed
-      if (_emailController.text.trim() != user.email) {
-        // ignore: deprecated_member_use
-        await user.updateEmail(_emailController.text.trim());
-      }
-      if (_passwordController.text.isNotEmpty) {
-        await user.updatePassword(_passwordController.text.trim());
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated successfully')),
-      );
+      _showSnackBar('Profile updated successfully', Colors.green);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update profile: $e')),
-      );
+      _showSnackBar('Update failed: $e', AppTheme.emergencyColor);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Your Profile')),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: SingleChildScrollView(
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      TextFormField(
-                        controller: _nameController,
-                        decoration: const InputDecoration(labelText: 'Name'),
-                        validator: (value) => value == null || value.isEmpty
-                            ? 'Name is required'
-                            : null,
-                      ),
-                      TextFormField(
-                        controller: _emailController,
-                        decoration: const InputDecoration(labelText: 'Email'),
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (value) =>
-                            value == null || !value.contains('@')
-                                ? 'Enter a valid email'
-                                : null,
-                      ),
-                      TextFormField(
-                        controller: _contactController,
-                        decoration: const InputDecoration(labelText: 'Contact'),
-                        keyboardType: TextInputType.phone,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Contact is required';
-                          }
-                          if (value.length != 10) {
-                            return 'Contact must be exactly 10 digits';
-                          }
-                          return null;
-                        },
-                      ),
-                      TextFormField(
-                        controller: _addressController,
-                        decoration: const InputDecoration(labelText: 'Address'),
-                        validator: (value) => value == null || value.isEmpty
-                            ? 'Address is required'
-                            : null,
-                      ),
-                      TextFormField(
-                        controller: _passwordController,
-                        decoration: InputDecoration(
-                          labelText: 'New Password',
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _isPasswordVisible
-                                  ? Icons.visibility
-                                  : Icons.visibility_off,
+      appBar: AppBar(title: const Text('Profile Settings')),
+      body: Container(
+        decoration: AppTheme.gradientBackground,
+        child: SafeArea(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+              : SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 20),
+                          FadeInDown(
+                            child: Center(
+                              child: Stack(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 60,
+                                    backgroundColor: AppTheme.primaryColor.withOpacity(0.2),
+                                    child: const Icon(Icons.person, size: 70, color: AppTheme.primaryColor),
+                                  ),
+                                  Positioned(
+                                    bottom: 0,
+                                    right: 0,
+                                    child: CircleAvatar(
+                                      radius: 20,
+                                      backgroundColor: AppTheme.secondaryColor,
+                                      child: IconButton(
+                                        icon: const Icon(Icons.camera_alt_rounded, size: 18, color: Colors.white),
+                                        onPressed: () {},
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            onPressed: () {
-                              setState(() {
-                                _isPasswordVisible = !_isPasswordVisible;
-                              });
-                            },
                           ),
-                        ),
-                        obscureText: !_isPasswordVisible,
-                        validator: (value) {
-                          if (value != null &&
-                              value.isNotEmpty &&
-                              value.length < 6) {
-                            return 'Password must be at least 6 characters';
-                          }
-                          return null;
-                        },
-                      ),
-                      TextFormField(
-                        controller: _confirmPasswordController,
-                        decoration: InputDecoration(
-                          labelText: 'Confirm Password',
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _isConfirmPasswordVisible
-                                  ? Icons.visibility
-                                  : Icons.visibility_off,
+                          const SizedBox(height: 40),
+                          FadeInUp(
+                            child: Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: AppTheme.cardColor,
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(color: Colors.white.withOpacity(0.05)),
+                              ),
+                              child: Column(
+                                children: [
+                                  _buildField(
+                                    controller: _nameController,
+                                    label: 'Full Name',
+                                    icon: Icons.person_outline_rounded,
+                                    validator: (v) => v!.isEmpty ? 'Name required' : null,
+                                  ),
+                                  const SizedBox(height: 20),
+                                  _buildField(
+                                    controller: _emailController,
+                                    label: 'Email Address',
+                                    icon: Icons.email_outlined,
+                                    readOnly: true,
+                                  ),
+                                  const SizedBox(height: 20),
+                                  _buildField(
+                                    controller: _contactController,
+                                    label: 'Phone Number',
+                                    icon: Icons.phone_android_rounded,
+                                    keyboardType: TextInputType.phone,
+                                  ),
+                                  const SizedBox(height: 20),
+                                  _buildField(
+                                    controller: _addressController,
+                                    label: 'Fixed Address',
+                                    icon: Icons.home_outlined,
+                                    maxLines: 2,
+                                  ),
+                                ],
+                              ),
                             ),
-                            onPressed: () {
-                              setState(() {
-                                _isConfirmPasswordVisible =
-                                    !_isConfirmPasswordVisible;
-                              });
-                            },
                           ),
-                        ),
-                        obscureText: !_isConfirmPasswordVisible,
-                        validator: (value) {
-                          if (value != _passwordController.text) {
-                            return 'Passwords do not match';
-                          }
-                          return null;
-                        },
+                          const SizedBox(height: 40),
+                          FadeInUp(
+                            delay: const Duration(milliseconds: 200),
+                            child: _isSaving
+                                ? const CircularProgressIndicator(color: AppTheme.primaryColor)
+                                : SizedBox(
+                                    width: double.infinity,
+                                    height: 60,
+                                    child: ElevatedButton(
+                                      onPressed: _saveProfile,
+                                      child: const Text('UPDATE PROFILE', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                    ),
+                                  ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 20),
-                      ElevatedButton(
-                        onPressed: _saveProfile,
-                        child: const Text('Save Details'),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool readOnly = false,
+    TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
+    int maxLines = 1,
+  }) {
+    return TextFormField(
+      controller: controller,
+      readOnly: readOnly,
+      keyboardType: keyboardType,
+      validator: validator,
+      maxLines: maxLines,
+      style: TextStyle(color: readOnly ? AppTheme.subtleTextColor : Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: AppTheme.primaryColor),
+      ),
     );
   }
 
@@ -237,8 +225,6 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
     _emailController.dispose();
     _contactController.dispose();
     _addressController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
     super.dispose();
   }
 }

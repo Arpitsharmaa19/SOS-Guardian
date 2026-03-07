@@ -1,134 +1,143 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:animate_do/animate_do.dart';
+import '../utils/app_theme.dart';
 
 class SetCodeWordScreen extends StatefulWidget {
   const SetCodeWordScreen({super.key});
 
   @override
-  State<SetCodeWordScreen> createState() => _SetCodeWordScreenState();
+  SetCodeWordScreenState createState() => SetCodeWordScreenState();
 }
 
-class _SetCodeWordScreenState extends State<SetCodeWordScreen> {
-  final TextEditingController _codeWordController = TextEditingController();
-  String? _presetCodeWord;
+class SetCodeWordScreenState extends State<SetCodeWordScreen> {
+  final _codeWordController = TextEditingController();
+  final _firestore = FirebaseFirestore.instance;
+  final _auth = FirebaseAuth.instance;
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _fetchPresetCodeWord();
+    _loadCurrentCodeWord();
   }
 
-  Future<void> _fetchPresetCodeWord() async {
-    try {
-      // Get the currently logged-in user
-      User? user = FirebaseAuth.instance.currentUser;
-
-      if (user != null) {
-        String userId = user.uid;
-
-        // Fetch the user's document from Firestore
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .get();
-
-        // Check if the document exists and contains a codeword field
-        if (userDoc.exists && userDoc.data() != null) {
-          final data = userDoc.data() as Map<String, dynamic>;
-          setState(() {
-            _presetCodeWord = data['codeword'] ?? '';
-            _codeWordController.text = _presetCodeWord!; // Populate the field
-          });
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No user is logged in')),
-        );
+  void _loadCurrentCodeWord() async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      if (doc.exists) {
+        setState(() {
+          _codeWordController.text = doc.data()?['codeword'] ?? '';
+        });
       }
-    } catch (e) {
-      // ignore: use_build_context_synchronously
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to fetch preset code word: $e')),
-      );
     }
   }
 
-  Future<void> _saveCodeWord() async {
-    final String codeWord = _codeWordController.text.trim();
-
-    if (codeWord.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a code word')),
-      );
+  void _saveCodeWord() async {
+    if (_codeWordController.text.isEmpty) {
+      _showSnackBar('Please enter a codeword', AppTheme.emergencyColor);
       return;
     }
 
+    setState(() => _isLoading = true);
     try {
-      // Get the currently logged-in user
-      User? user = FirebaseAuth.instance.currentUser;
-
+      final user = _auth.currentUser;
       if (user != null) {
-        String userId = user.uid;
-
-        // Save the code word to Firestore under the user's document
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .update({
-          'codeword': codeWord,
+        await _firestore.collection('users').doc(user.uid).update({
+          'codeword': _codeWordController.text.trim(),
         });
-
-        // ignore: use_build_context_synchronously
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Code word saved successfully')),
-        );
-
-        // Clear the text field after saving
-        _codeWordController.clear();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No user is logged in')),
-        );
+        _showSnackBar('Codeword updated successfully', Colors.green);
+        Navigator.pop(context);
       }
     } catch (e) {
-      // ignore: use_build_context_synchronously
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save code word: $e')),
-      );
+      _showSnackBar('Error: $e', AppTheme.emergencyColor);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Set Code Word')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            TextField(
-              controller: _codeWordController,
-              decoration: const InputDecoration(labelText: 'Code Word'),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _saveCodeWord,
-              child: const Text('Save'),
-            ),
-            if (_presetCodeWord != null && _presetCodeWord!.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 16.0),
-                child: Text(
-                  'Preset Code Word: $_presetCodeWord',
-                  style: const TextStyle(
-                    fontSize: 16.0,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
+      appBar: AppBar(title: const Text('Set Secret Codeword')),
+      body: Container(
+        decoration: AppTheme.gradientBackground,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 30.0),
+            child: Column(
+              children: [
+                const SizedBox(height: 40),
+                FadeInDown(
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: AppTheme.cardColor,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white.withOpacity(0.05)),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.security_rounded, size: 60, color: AppTheme.primaryColor),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Your Emergency Trigger',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'When spoken, this word will instantly trigger all SOS alerts and share your location.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppTheme.subtleTextColor),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-          ],
+                const SizedBox(height: 40),
+                FadeInUp(
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _codeWordController,
+                        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2),
+                        textAlign: TextAlign.center,
+                        decoration: InputDecoration(
+                          hintText: 'e.g. HELP',
+                          hintStyle: TextStyle(color: Colors.white12),
+                          helperText: 'Choose a word that is easy to speak in an emergency',
+                          helperStyle: TextStyle(color: AppTheme.subtleTextColor),
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                      _isLoading
+                        ? const CircularProgressIndicator(color: AppTheme.primaryColor)
+                        : SizedBox(
+                            width: double.infinity,
+                            height: 60,
+                            child: ElevatedButton(
+                              onPressed: _saveCodeWord,
+                              child: const Text('SAVE CODEWORD', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

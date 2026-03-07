@@ -1,188 +1,185 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:animate_do/animate_do.dart';
 import 'registration_screen.dart';
 import 'home_screen.dart';
-import 'package:email_validator/email_validator.dart';
+import '../utils/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  LoginScreenState createState() => LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
-  final _formKey = GlobalKey<FormState>(); // Key for form validation
+class LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
+  final _auth = FirebaseAuth.instance;
+  bool _isLoading = false;
 
-  Future<void> _login() async {
-    if (_formKey.currentState!.validate()) {
-      // Validate the form fields
-      final email = _emailController.text.trim();
-      final password = _passwordController.text.trim();
-
-      try {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => HomeScreen()),
-        );
-      } catch (e) {
-        // Show an alert dialog if user is not registered or any error occurs
-        if (e is FirebaseAuthException) {
-          if (e.code == 'user-not-found' || e.code == 'wrong-password') {
-            _showAlertDialog('Incorrect email or password');
-          } else {
-            _showAlertDialog('Login failed: ${e.message}');
-          }
-        } else {
-          _showAlertDialog('An error occurred: ${e.toString()}');
-        }
-      }
+  void _login() async {
+    setState(() => _isLoading = true);
+    try {
+      await _auth.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error: $e"),
+          backgroundColor: AppTheme.emergencyColor,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  // Function to show alert dialog
-  void _showAlertDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Error'),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('OK'),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('')),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // App Logo
-                    Center(
-                      child: Image.asset(
-                        'assets/logo.png',
-                        height: 100,
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // App Name
-                    const Center(
-                      child: Text(
-                        'VoiceAid',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 32),
-
-                    // Email Field
-                    TextFormField(
-                      controller: _emailController,
-                      decoration: const InputDecoration(labelText: 'Email'),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Email is required';
-                        }
-                        if (!EmailValidator.validate(value)) {
-                          return 'Enter a valid email';
-                        }
-                        return null;
-                      },
-                    ),
-
-                    const SizedBox(height: 16), // Add space between fields
-
-                    // Password Field with Show Password Icon
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off
-                                : Icons.visibility,
+      body: Container(
+        decoration: AppTheme.gradientBackground,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(30.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 60),
+                  FadeInDown(
+                    duration: const Duration(seconds: 1),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Welcome Back',
+                          style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            });
-                          },
                         ),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Password is required';
-                        }
-                        return null;
-                      },
+                        const SizedBox(height: 8),
+                        Text(
+                          'Enter your credentials to continue',
+                          style: TextStyle(
+                            color: AppTheme.subtleTextColor,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
                     ),
-
-                    const SizedBox(height: 16), // Add space between fields
-
-                    const SizedBox(height: 16), // Add space before buttons
-
-                    // Login Button
-                    Center(
-                      child: ElevatedButton(
-                        onPressed: _login,
-                        child: const Text('Login'),
-                      ),
-                    ),
-
-                    // Register Button
-                    Center(
-                      child: TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const RegistrationScreen(),
+                  ),
+                  const SizedBox(height: 60),
+                  FadeInUp(
+                    duration: const Duration(milliseconds: 800),
+                    child: Column(
+                      children: [
+                        _buildInputField(
+                          controller: _emailController,
+                          label: 'Email Address',
+                          icon: Icons.alternate_email_rounded,
+                          keyboardType: TextInputType.emailAddress,
+                        ),
+                        const SizedBox(height: 20),
+                        _buildInputField(
+                          controller: _passwordController,
+                          label: 'Password',
+                          icon: Icons.lock_outline_rounded,
+                          obscureText: true,
+                        ),
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () {},
+                            child: const Text('Forgot Password?', style: TextStyle(color: AppTheme.primaryColor)),
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                        _isLoading
+                          ? const CircularProgressIndicator(color: AppTheme.primaryColor)
+                          : Container(
+                              width: double.infinity,
+                              height: 55,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(15),
+                                gradient: const LinearGradient(
+                                  colors: [AppTheme.primaryColor, AppTheme.secondaryColor],
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.primaryColor.withOpacity(0.3),
+                                    blurRadius: 15,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
+                              ),
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.transparent,
+                                  shadowColor: Colors.transparent,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                                ),
+                                onPressed: _login,
+                                child: const Text(
+                                  'LOGIN',
+                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                ),
+                              ),
                             ),
-                          );
-                        },
-                        child: const Text('Register'),
-                      ),
+                        const SizedBox(height: 40),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              "Don't have an account?",
+                              style: TextStyle(color: AppTheme.subtleTextColor),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.push(context, MaterialPageRoute(builder: (context) => const RegistrationScreen()));
+                              },
+                              child: const Text('RegisterNow', style: TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildInputField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool obscureText = false,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: obscureText,
+      keyboardType: keyboardType,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: AppTheme.primaryColor),
       ),
     );
   }
