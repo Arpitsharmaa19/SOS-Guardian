@@ -8,7 +8,7 @@ class ApiConfig {
   // For Production: Use your deployed URL (e.g., 'https://your-app.render.com')
   // ---------------------------------------------------------
   
-  static const String baseUrl = 'http://192.168.1.34:3000'; 
+  static const String baseUrl = 'https://sos-guardian-api.onrender.com'; 
 
   static String get statusUrl => '$baseUrl/status';
   static String get reportSosUrl => '$baseUrl/report-sos';
