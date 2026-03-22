@@ -14,9 +14,10 @@ class AddEmergencyContactsScreen extends StatefulWidget {
 class AddEmergencyContactsScreenState extends State<AddEmergencyContactsScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
   final _firestore = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
-  Map<String, String> _contacts = {};
+  Map<String, dynamic> _contacts = {};
   bool _isLoading = false;
 
   @override
@@ -31,15 +32,15 @@ class AddEmergencyContactsScreenState extends State<AddEmergencyContactsScreen> 
       final doc = await _firestore.collection('users').doc(user.uid).get();
       if (doc.exists && doc.data()!.containsKey('contactList')) {
         setState(() {
-          _contacts = Map<String, String>.from(doc.data()!['contactList']);
+          _contacts = Map<String, dynamic>.from(doc.data()!['contactList']);
         });
       }
     }
   }
 
   void _addContact() async {
-    if (_nameController.text.isEmpty || _phoneController.text.isEmpty) {
-      _showSnackBar('Provide both name and number', AppTheme.emergencyColor);
+    if (_nameController.text.isEmpty || _phoneController.text.isEmpty || _emailController.text.isEmpty) {
+      _showSnackBar('Provide name, number and email', AppTheme.emergencyColor);
       return;
     }
 
@@ -47,12 +48,28 @@ class AddEmergencyContactsScreenState extends State<AddEmergencyContactsScreen> 
     try {
       final user = _auth.currentUser;
       if (user != null) {
-        _contacts[_nameController.text.trim()] = _phoneController.text.trim();
-        await _firestore.collection('users').doc(user.uid).update({
-          'contactList': _contacts,
-        });
+        // Store as a nested map: { name: { phone: ..., email: ... } }
+        final newContactData = {
+          'phone': _phoneController.text.trim(),
+          'email': _emailController.text.trim(),
+        };
+        
+        // Fetch current list
+        final doc = await _firestore.collection('users').doc(user.uid).get();
+        Map<String, dynamic> currentContacts = {};
+        if (doc.exists && doc.data()!.containsKey('contactList')) {
+          currentContacts = Map<String, dynamic>.from(doc.data()!['contactList']);
+        }
+        
+        currentContacts[_nameController.text.trim()] = newContactData;
+
+        await _firestore.collection('users').doc(user.uid).set({
+          'contactList': currentContacts,
+        }, SetOptions(merge: true));
+
         _nameController.clear();
         _phoneController.clear();
+        _emailController.clear();
         _showSnackBar('Contact added successfully', Colors.green);
         _loadContacts();
       }
@@ -114,6 +131,8 @@ class AddEmergencyContactsScreenState extends State<AddEmergencyContactsScreen> 
                         _buildInputField(_nameController, 'Contact Name', Icons.person_outline),
                         const SizedBox(height: 15),
                         _buildInputField(_phoneController, 'Phone Number', Icons.phone_android_outlined, keyboardType: TextInputType.phone),
+                        const SizedBox(height: 15),
+                        _buildInputField(_emailController, 'Email Address', Icons.email_outlined, keyboardType: TextInputType.emailAddress),
                         const SizedBox(height: 20),
                         _isLoading
                           ? const CircularProgressIndicator()
@@ -144,7 +163,10 @@ class AddEmergencyContactsScreenState extends State<AddEmergencyContactsScreen> 
                         itemCount: _contacts.length,
                         itemBuilder: (context, index) {
                           String name = _contacts.keys.elementAt(index);
-                          String phone = _contacts[name]!;
+                          dynamic data = _contacts[name];
+                          String phone = (data is Map) ? data['phone'] ?? '' : data.toString();
+                          String email = (data is Map) ? data['email'] ?? '' : '';
+                          
                           return FadeInUp(
                             delay: Duration(milliseconds: index * 100),
                             child: Container(
@@ -157,7 +179,13 @@ class AddEmergencyContactsScreenState extends State<AddEmergencyContactsScreen> 
                                   child: Icon(Icons.emergency_rounded, color: Colors.white),
                                 ),
                                 title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text(phone, style: TextStyle(color: AppTheme.subtleTextColor)),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(phone, style: TextStyle(color: AppTheme.subtleTextColor, fontSize: 12)),
+                                    if (email.isNotEmpty) Text(email, style: TextStyle(color: AppTheme.subtleTextColor, fontSize: 11)),
+                                  ],
+                                ),
                                 trailing: IconButton(
                                   icon: const Icon(Icons.delete_outline, color: AppTheme.emergencyColor),
                                   onPressed: () => _deleteContact(name),

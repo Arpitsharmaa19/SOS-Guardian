@@ -25,7 +25,7 @@ android {
     defaultConfig {
         applicationId = "com.sosguardian.app"
 
-        minSdkVersion 23
+        minSdkVersion flutter.minSdkVersion
         targetSdkVersion 34
         versionCode flutter.versionCode
         versionName flutter.versionName

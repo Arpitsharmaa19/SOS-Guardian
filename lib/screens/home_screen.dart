@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:logger/logger.dart';
 import 'package:animate_do/animate_do.dart';
@@ -11,10 +12,14 @@ import 'sos_history_screen.dart';
 import 'package:location/location.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:telephony/telephony.dart';
+// Redundant import removed for web safety
 import '../services/whatsapp_service.dart';
 import '../utils/app_theme.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import '../utils/api_config.dart';
 
 final logger = Logger();
 
@@ -28,25 +33,26 @@ class HomeScreen extends StatefulWidget {
 class HomeScreenState extends State<HomeScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final stt.SpeechToText _speechToText = stt.SpeechToText();
+  final FlutterTts _flutterTts = FlutterTts();
   bool _isListening = false;
   String _text = '';
   bool _isLocationEnabled = false;
   bool _isActivated = false;
-  bool _servicesReady = false; // Master toggle state
+  bool _servicesReady = false; 
+  double _maxSoundLevel = 0.0; // Captures peak volume for emotion
 
   // For Recurring Updates
   Timer? _locationUpdateTimer;
 
   // Track if SOS was already triggered during this session to avoid multiple sends
   bool _sosTriggered = false;
+  String? _lastDetectedEmotion = 'Urgent';
+  String _detectedEmotionDisplay = '';
 
   @override
   void initState() {
     super.initState();
-    // Auto-trigger services on app launch (No clicking required)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _toggleServices(true);
-    });
+    // Services now start only on user interaction for better Web compatibility
   }
 
   @override
@@ -67,7 +73,6 @@ class HomeScreenState extends State<HomeScreen> {
         onStatus: (status) {
           logger.d("STT Status: $status");
           if (status == 'notListening' && _isListening && !_isActivated) {
-            // Auto-restart if it stops but we still want to be listening
             Future.delayed(const Duration(milliseconds: 500), () => _startListeningLoop());
           }
         },
@@ -77,6 +82,11 @@ class HomeScreenState extends State<HomeScreen> {
              Future.delayed(const Duration(seconds: 1), () => _startListeningLoop());
           }
         },
+        /* onSoundLevelChange: (level) {
+           if (level > _maxSoundLevel) {
+             setState(() => _maxSoundLevel = level);
+           }
+        } */
       );
       
       setState(() {
@@ -146,6 +156,7 @@ class HomeScreenState extends State<HomeScreen> {
         _isActivated = false;
         _text = '';
         _sosTriggered = false;
+        _maxSoundLevel = 0.0;
       });
       _startListeningLoop();
     }
@@ -153,37 +164,56 @@ class HomeScreenState extends State<HomeScreen> {
 
   // Backup Manual SOS for the teacher demo
   Future<void> _manualForceSOS() async {
-    _triggerAlarmProcedure('Manual Override');
+    await _triggerAlarmProcedure('Manual Override');
+  }
+
+  Future<void> _testBackendConnection() async {
+    try {
+      final response = await http.get(Uri.parse(ApiConfig.statusUrl)).timeout(const Duration(seconds: 3));
+      if (response.statusCode == 200) {
+        _showSnackBar('✅ Backend Connected Successfully!', Colors.green);
+        logger.i("Backend test successful: ${response.body}");
+      } else {
+        _showSnackBar('❌ Backend Error: ${response.statusCode}', AppTheme.emergencyColor);
+      }
+    } catch (e) {
+      _showSnackBar('❌ Cannot reach Backend at ${ApiConfig.baseUrl}', AppTheme.emergencyColor);
+      logger.e("Backend connection failed: $e");
+    }
   }
 
   Future<void> _logSOSHistory({required String type}) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      try {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('sos_history')
-            .add({
-          'timestamp': FieldValue.serverTimestamp(),
-          'type': type,
-        });
-        logger.d("SOS History logged successfully for type: $type");
-      } catch (e) {
-        logger.e("Failed to log SOS history: $e");
-      }
-    } else {
-      logger.w("Cannot log SOS history: User is null");
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? historyString = prefs.getString('sos_history_local');
+      List<dynamic> history = historyString != null ? jsonDecode(historyString) : [];
+      
+      final newEntry = {
+        'timestamp': DateTime.now().toIso8601String(),
+        'type': type,
+      };
+      
+      history.insert(0, newEntry); // Most recent first
+      
+      // Keep only last 50 entries to save memory
+      if (history.length > 50) history = history.sublist(0, 50);
+      
+      await prefs.setString('sos_history_local', jsonEncode(history));
+      logger.i("✅ SOS History saved to LOCAL STORAGE");
+    } catch (e) {
+      logger.e("❌ Failed to log SOS history locally: $e");
     }
   }
 
   void _startRecurringUpdates() {
     _locationUpdateTimer?.cancel();
+    logger.i("⏳ Starting 3-minute recurring update timer...");
     _locationUpdateTimer = Timer.periodic(const Duration(minutes: 3), (timer) {
       if (_isActivated) {
-        logger.d("Sending recurring 3-minute location update...");
-        _sendSOSMessages();
+        logger.i("🕒 3-Minute Cycle Reached: Sending location update...");
+        _sendSOSMessages(isRecurring: true, emotion: _lastDetectedEmotion); // Pass the last detected emotion
       } else {
+        logger.i("⏹️ SOS Deactivated: Stopping recurring updates.");
         timer.cancel();
       }
     });
@@ -193,23 +223,40 @@ class HomeScreenState extends State<HomeScreen> {
     if (_sosTriggered || _isActivated) return;
 
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      print("⚠️ VOICE_TRIGGER: No user logged in. Ignoring speech.");
+      return;
+    }
+    print("🎤 VOICE_TRIGGER: Heard text: '$spokenText'");
 
     final normalizedSpoken = spokenText.trim().toLowerCase();
     
-    // Check for codeword - local check first for speed
-    if (normalizedSpoken.contains('help') || normalizedSpoken.contains('danger')) {
-       _triggerAlarmProcedure('Voice (Instant)');
-       return;
+    // 1. Check LOCAL storage first (fast & works offline)
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final localCodeword = (prefs.getString('cached_codeword') ?? '').trim().toLowerCase();
+      if (localCodeword.isNotEmpty && normalizedSpoken.contains(localCodeword)) {
+        await _triggerAlarmProcedure('Voice (Local Cache)', codeword: localCodeword);
+        return;
+      }
+    } catch (e) {
+      logger.e("Local codeword check error: $e");
     }
 
-    // Still check Firestore for custom codewords
+    // 2. Check Firestore (Sync and update cache)
     try {
       final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       if (doc.exists) {
         final savedCodeWord = (doc.data()?['codeword'] ?? '').toString().trim().toLowerCase();
-        if (savedCodeWord.isNotEmpty && normalizedSpoken.contains(savedCodeWord)) {
-          _triggerAlarmProcedure('Voice (Custom)');
+        
+        // Update local cache for next time
+        if (savedCodeWord.isNotEmpty) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('cached_codeword', savedCodeWord);
+          
+          if (normalizedSpoken.contains(savedCodeWord)) {
+            await _triggerAlarmProcedure('Voice (Custom)', codeword: savedCodeWord);
+          }
         }
       }
     } catch (e) {
@@ -217,23 +264,78 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _triggerAlarmProcedure(String source) {
+  Future<void> _triggerAlarmProcedure(String source, {String? codeword}) async {
     if (_sosTriggered) return;
     
     _sosTriggered = true;
+    print("🔥 SOS_PHASE: Triggered via $source");
     logger.i("🔥 SOS TRIGGERED via $source");
 
     setState(() {
       _isActivated = true;
       _isListening = false;
       _speechToText.stop();
+      _detectedEmotionDisplay = 'Analyzing...';
     });
 
-    _showSnackBar('🚨 SOS ACTIVATED! 🚨', AppTheme.emergencyColor);
+    // --- INSTANT DISPATCH: Phase 1 (Absolute Minimum Latency) ---
+    _sendSOSMessages(isRecurring: false, emotion: "Urgent (Context Analyzing...)");
+    _showSnackBar('🚨 SOS ACTIVATED - ALERTS DISPATCHED!', AppTheme.emergencyColor);
+
+    // --- PHASE 2: Rapid Situation Analysis (1 sec) ---
+    String detectedEmotion = "Urgent SOS";
+    try {
+      final analysis = await WhatsAppService.analyzeEmotion(_text, codeword, _maxSoundLevel);
+      if (analysis != null) {
+        detectedEmotion = analysis['emotion'] ?? detectedEmotion;
+        _lastDetectedEmotion = detectedEmotion;
+        
+        // Update user display
+        setState(() { _detectedEmotionDisplay = detectedEmotion; });
+        
+        // --- SECONDARY DISPATCH: Updated Detail Alert (Optional refined notification) ---
+        print("🚀 REFINEMENT: Sending updated situational context: $detectedEmotion");
+        // We only send a second one if recurring updates are far away (3 mins)
+      }
+    } catch (e) {
+      logger.e("Analysis skip: $e");
+    }
     
-    // Instant actions
-    _logSOSHistory(type: source);
-    _sendSOSMessages();
+    // Continue with analysis in background
+    
+    // --- HUMAN-GRADE NEURAL VOICE SELECTION ---
+    try {
+      if (kIsWeb) {
+        final voices = await _flutterTts.getVoices;
+        if (voices != null && voices is List) {
+          // Priority 1: Neural High-Fidelity (sfg)
+          // Priority 2: Standard Google Female
+          // Priority 3: Any Premium US Female
+          dynamic bestVoice = voices.firstWhere(
+            (v) => v.toString().contains('en-us-x-sfg'), // The most human sounding one
+            orElse: () => voices.firstWhere(
+              (v) => v.toString().contains('Google') && v.toString().contains('en-US'),
+              orElse: () => voices.firstWhere(
+                (v) => v.toString().toLowerCase().contains('female') && v.toString().contains('en-US'),
+                orElse: () => null
+              )
+            ),
+          );
+
+          if (bestVoice != null) {
+            Map<String, String> voiceMap = Map<String, String>.from(bestVoice);
+            await _flutterTts.setVoice(voiceMap);
+            logger.i("🎯 Elite Neural Voice Activated: ${voiceMap['name']}");
+          } else {
+             await _flutterTts.setLanguage("en-US");
+          }
+        }
+      }
+    } catch (e) {
+      logger.w("Voice selection failed, staying with system standard: $e");
+    }
+
+    _logSOSHistory(type: "$source ($detectedEmotion)");
     _startRecurringUpdates();
   }
 
@@ -268,71 +370,193 @@ class HomeScreenState extends State<HomeScreen> {
       setState(() {
         _isLocationEnabled = true;
       });
+      logger.i("🎯 Location Services Enabled");
     } catch (e) {
       logger.e("Location error: $e");
       _isLocationEnabled = false;
     }
   }
 
-  Future<void> _sendSOSMessages() async {
+  Future<void> _sendSOSMessages({bool isRecurring = false, String? emotion}) async {
     final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+       print("❌ ALERT_PHASE: Cannot send messages, user is NULL");
+       return;
+    }
+    print("🚀 ALERT_PHASE: Processing SOS Message sending...");
 
-    if (user == null) return;
+    List<String> contactsList = [];
+    Map<String, dynamic>? contactsMap;
+    String userName = 'Your contact';
+    String userPhone = 'N/A';
+    String userEmail = 'N/A';
+    String userAddress = 'N/A';
+    String userBlood = 'N/A';
+    String userPhoto = '';
 
+    print("🚀 ALERT_PHASE: Fetching data from Firestore for UID: ${user.uid}");
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      final data = doc.data();
-
-      if (data == null || !data.containsKey('contactList')) return;
-
-      final dynamic rawContacts = data['contactList'];
-      logger.d("Raw contacts from Firestore: $rawContacts");
-      List<String> contactsList = [];
-      
-      if (rawContacts is Map) {
-        contactsList = rawContacts.values.map((e) => e.toString().trim()).toList();
-      } else if (rawContacts is List) {
-        contactsList = rawContacts.map((e) => e.toString().trim()).toList();
-      }
-
-      logger.i("Sending SOS to ${contactsList.length} contacts: $contactsList");
-
-      if (contactsList.isEmpty) {
-        logger.w("No emergency contacts found! Message aborted.");
-        return;
-      }
-
-      String locationLink = 'https://www.google.com/maps/search/?api=1&query=20.5937,78.9629';
-      try {
-        final Location location = Location();
-        final LocationData currentLocation = await location.getLocation();
-        locationLink = 'https://maps.google.com/?q=${currentLocation.latitude},${currentLocation.longitude}';
-      } catch (e) {
-        logger.w("Could not fetch location: $e");
-      }
-
-      final String message = '🚨 SOS ALERT! My current location: $locationLink';
-
-      for (final contact in contactsList) {
-        try {
-          logger.d("Calling WhatsApp service for $contact...");
-          await WhatsAppService.sendWhatsAppAlert(contact, message);
-          
-          if (!kIsWeb && Theme.of(context).platform == TargetPlatform.android) {
-            final Telephony telephony = Telephony.instance;
-            await telephony.sendSms(to: contact, message: message);
-          }
-        } catch (e) {
-          logger.e("Failed to send to $contact: $e");
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get().timeout(const Duration(seconds: 5));
+      if (doc.exists) {
+        final data = doc.data()!;
+        final dynamic rawContacts = data['contactList'];
+        print("✅ ALERT_PHASE: Raw Contacts data: $rawContacts");
+        if (rawContacts is Map) {
+          contactsMap = Map<String, dynamic>.from(rawContacts);
+          contactsList = contactsMap.keys.toList();
+        } else if (rawContacts is List) {
+          contactsList = rawContacts.map((e) => e.toString().trim()).toList();
         }
+        userName = data['name'] ?? 'Your contact';
+        userPhone = data['phone'] ?? 'N/A';
+        userEmail = data['email'] ?? 'N/A';
+        userAddress = data['address'] ?? 'N/A';
+        userBlood = data['bloodType'] ?? 'N/A';
+        userPhoto = data['photoUrl'] ?? '';
+        print("✅ ALERT_PHASE: UserName: $userName, ContactsCount: ${contactsList.length}");
+        
+        // Cache for fail-safe
+        final prefs = await SharedPreferences.getInstance();
+        if (contactsList.isNotEmpty) {
+          await prefs.setStringList('cached_contacts', contactsList);
+          await prefs.setString('cached_user_name', userName);
+        }
+      } else {
+        print("⚠️ ALERT_PHASE: User document does NOT exist in Firestore");
       }
     } catch (e) {
-      logger.e("Global Send Error: $e");
+      print("❌ ALERT_PHASE: Firestore Fetch Failed: $e");
+      final prefs = await SharedPreferences.getInstance();
+      contactsList = prefs.getStringList('cached_contacts') ?? [];
+      userName = prefs.getString('cached_user_name') ?? 'Your contact';
     }
+
+    if (contactsList.isEmpty) {
+      print("⚠️ ALERT_PHASE: ABORTED - contactsList is EMPTY");
+      logger.w("No contacts found (Firestore & Cache empty)!");
+      if (!isRecurring) _showSnackBar('No emergency contacts set!', AppTheme.emergencyColor);
+      return;
+    }
+    print("✅ ALERT_PHASE: Found ${contactsList.length} contacts. Proceeding to send.");
+
+    String locationLink = 'Location Unavailable (Check Connectivity)';
+    try {
+      final Location location = Location();
+      logger.d("📍 Fetching precise coordinates...");
+      final LocationData currentLocation = await location.getLocation().timeout(
+        isRecurring ? const Duration(seconds: 10) : const Duration(milliseconds: 1500)
+      );
+      
+      if (currentLocation.latitude != null && currentLocation.longitude != null) {
+        locationLink = 'https://www.google.com/maps/search/?api=1&query=${currentLocation.latitude},${currentLocation.longitude}';
+        logger.i("✅ Precise Location Lat: ${currentLocation.latitude}, Lng: ${currentLocation.longitude}");
+
+        // --- GLOBAL POLICE DASHBOARD SYNC (FIREBASE - Keep for history) ---
+        FirebaseFirestore.instance.collection('active_sos').doc(user.uid).set({
+          'userId': user.uid,
+          'userName': userName,
+          'emotion': emotion,
+          'location': locationLink,
+          'lat': currentLocation.latitude,
+          'lng': currentLocation.longitude,
+          'timestamp': FieldValue.serverTimestamp(),
+          'status': 'active',
+        }, SetOptions(merge: true));
+
+        http.post(
+          Uri.parse(ApiConfig.reportSosUrl),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'userId': user.uid,
+            'userName': userName,
+            'userPhone': userPhone,
+            'userEmail': userEmail,
+            'userAddress': userAddress,
+            'userBlood': userBlood,
+            'userPhoto': userPhoto,
+            'emotion': emotion,
+            'lat': currentLocation.latitude,
+            'lng': currentLocation.longitude,
+            'locationLink': locationLink,
+          }),
+        ).catchError((e) => print("HQ Signal Error: $e"));
+      }
+    } catch (e) {
+      logger.w("⚠️ Precise location fetch timed out or failed: $e. Falling back to last known if possible.");
+      try {
+        final lastLoc = await Location().getLocation().timeout(const Duration(seconds: 2)); 
+        locationLink = 'https://www.google.com/maps/search/?api=1&query=${lastLoc.latitude},${lastLoc.longitude}';
+      } catch (_) {
+         logger.e("💀 Could not determine location at all.");
+      }
+    }
+
+    logger.i("🎯 Attempting to alert ${contactsList.length} contacts: $contactsList");
+    
+    // Create the message first so we don't wait for location to start looping if it fails
+    String specializedStatus = "";
+    if (emotion != null) {
+      if (emotion.contains("Terror")) specializedStatus = "\n⚠️ SITUATION CRITICAL: Extreme panic detected.";
+      else if (emotion.contains("Anger")) specializedStatus = "\n⚠️ SITUATION URGENT: Conflict detected.";
+      else if (emotion.contains("Pain")) specializedStatus = "\n⚠️ SITUATION CRITICAL: Physical injury detected.";
+      else if (emotion.contains("Sadness") || emotion.contains("Hiding")) specializedStatus = "\n⚠️ SITUATION SENSITIVE: User is hiding.";
+      else specializedStatus = "\n⚠️ SITUATION URGENT: High stress detected.";
+    }
+
+    final String timeStamp = DateTime.now().toLocal().toString().substring(11, 16);
+    final String safeEmotion = (emotion == null || emotion.isEmpty) ? "Urgent Distress" : emotion;
+    
+    final String baseMessage = isRecurring 
+      ? '📍 [OFFICIAL UPDATE - $timeStamp]: $userName is still in a $safeEmotion state. Please remain on standby. '
+      : '🚨 HIGH-PRIORITY SAFETY NOTIFICATION [$timeStamp]: $userName has activated an SOS emergency alert. \n\n🧠 SITUATION: $safeEmotion.';
+
+    // Start sending to each contact
+    for (final contactName in contactsList) {
+      try {
+        final contactData = (contactsMap != null) ? contactsMap[contactName] : null;
+        String? phone;
+        String? email;
+        
+        if (contactData is Map) {
+          phone = contactData['phone']?.toString();
+          email = contactData['email']?.toString();
+        } else {
+          phone = contactData?.toString();
+        }
+
+        print("🚀 ALERT_PHASE: Processing Contact [$contactName] -> Phone: $phone, Email: $email | Full Data: $contactData");
+
+        final String finalMessage = "$baseMessage Please check live location here: $locationLink";
+
+        // --- DISABLE EMAIL DISPATCH (Per User Request) ---
+        /*
+        if (email != null && email.isNotEmpty) {
+           print("📧 ALERT_PHASE: Dispatching Email to $email");
+           // ignore: unawaited_futures
+           WhatsAppService.sendEmailAlert(email, finalMessage);
+        }
+        */
+
+        if (phone != null && phone.isNotEmpty) {
+          if (!isRecurring) {
+            final String voiceMessage = "Emergency alert! $userName needs help. Situational context: $emotion. Check your SMS for live location.";
+            print("📞 ALERT_PHASE: Dispatching Voice Call to $phone");
+            // ignore: unawaited_futures
+            WhatsAppService.makeVoiceCall(phone, voiceMessage);
+          }
+
+          // --- ALWAYS SEND SMS (Initial and Recurring Updates) ---
+          print("📱 ALERT_PHASE: Dispatching SMS Alert to $phone (isRecurring: $isRecurring)");
+          // ignore: unawaited_futures
+          WhatsAppService.sendSMSAlert(phone, finalMessage);
+        }
+      } catch (e) {
+        print("❌ ALERT_PHASE: Error in contact loop for $contactName: $e");
+      }
+    }
+    logger.i("🏁 Alert cycle complete.");
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -577,63 +801,87 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFeedbackSection() {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser?.uid).snapshots(),
-      builder: (context, snapshot) {
-        String activeCodeword = "...";
-        if (snapshot.hasData && snapshot.data!.exists) {
-          activeCodeword = snapshot.data!['codeword'] ?? 'Not Set';
-        }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const SizedBox.shrink();
 
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: AppTheme.cardColor,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.05)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return FutureBuilder<SharedPreferences>(
+      future: SharedPreferences.getInstance(),
+      builder: (context, prefsSnapshot) {
+        final String cachedCodeword = prefsSnapshot.data?.getString('cached_codeword') ?? '...';
+
+        return StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+          builder: (context, snapshot) {
+            String activeCodeword = cachedCodeword;
+            if (snapshot.hasData && snapshot.data!.exists) {
+              activeCodeword = snapshot.data!['codeword'] ?? activeCodeword;
+            }
+
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppTheme.cardColor,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withOpacity(0.05)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'STATUS: ${_isActivated ? "SOS ACTIVE" : (_isListening ? "LISTENING" : "IDLE")}',
-                    style: TextStyle(
-                      color: _isActivated ? AppTheme.emergencyColor : (_isListening ? Colors.green : AppTheme.subtleTextColor),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.5,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'STATUS: ${_isActivated ? "SOS ACTIVE" : (_isListening ? "LISTENING" : "IDLE")}',
+                        style: TextStyle(
+                          color: _isActivated ? AppTheme.emergencyColor : (_isListening ? Colors.green : AppTheme.subtleTextColor),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      Text(
+                        'TRIGGER: ${activeCodeword.toUpperCase()}',
+                        style: const TextStyle(
+                          color: AppTheme.primaryColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 16),
+                  const Divider(color: Colors.white10),
+                  const SizedBox(height: 10),
+                  if (_isActivated && _detectedEmotionDisplay.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12.0),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.psychology_outlined, size: 16, color: AppTheme.primaryColor),
+                          const SizedBox(width: 8),
+                          Text(
+                            'EMOTION: ${_detectedEmotionDisplay.toUpperCase()}',
+                            style: const TextStyle(color: AppTheme.primaryColor, fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
                   Text(
-                    'TRIGGER: ${activeCodeword.toUpperCase()}',
-                    style: const TextStyle(
-                      color: AppTheme.primaryColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
+                    _isActivated ? "Real-time updates sending every 3 mins..." : (_text.isEmpty ? "Waiting for speech..." : _text),
+                    style: TextStyle(
+                      color: _text.isEmpty && !_isActivated ? Colors.white24 : Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      fontStyle: _text.isEmpty ? FontStyle.italic : FontStyle.normal,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              const Divider(color: Colors.white10),
-              const SizedBox(height: 10),
-              Text(
-                _isActivated ? "Real-time updates sending every 3 mins..." : (_text.isEmpty ? "Waiting for speech..." : _text),
-                style: TextStyle(
-                  color: _text.isEmpty && !_isActivated ? Colors.white24 : Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                  fontStyle: _text.isEmpty ? FontStyle.italic : FontStyle.normal,
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         );
-      }
+      },
     );
   }
 
@@ -664,6 +912,14 @@ class HomeScreenState extends State<HomeScreen> {
             icon: Icons.history_rounded,
             title: 'SOS History',
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => SOSHistoryScreen())),
+          ),
+          _drawerItem(
+            icon: Icons.electrical_services_rounded,
+            title: 'Test Alert System',
+            onTap: () {
+               Navigator.pop(context);
+               _testBackendConnection();
+            },
           ),
           const Divider(color: Colors.white10, indent: 20, endIndent: 20),
           _drawerItem(

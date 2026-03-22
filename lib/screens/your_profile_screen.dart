@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:image_picker/image_picker.dart';
 import '../utils/app_theme.dart';
 
 class YourProfileScreen extends StatefulWidget {
@@ -18,6 +20,8 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
   final _emailController = TextEditingController();
   final _contactController = TextEditingController();
   final _addressController = TextEditingController();
+  final _bloodTypeController = TextEditingController();
+  String _profileImageBase64 = '';
 
   bool _isLoading = true;
   bool _isSaving = false;
@@ -44,6 +48,8 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
         _emailController.text = data['email'] ?? '';
         _contactController.text = data['phone'] ?? ''; // Fixed to 'phone' as per registration
         _addressController.text = data['address'] ?? '';
+        _bloodTypeController.text = data['bloodType'] ?? '';
+        _profileImageBase64 = data['photoUrl'] ?? '';
       }
 
       setState(() => _isLoading = false);
@@ -68,6 +74,8 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
         'name': _nameController.text.trim(),
         'phone': _contactController.text.trim(),
         'address': _addressController.text.trim(),
+        'bloodType': _bloodTypeController.text.trim().toUpperCase(),
+        'photoUrl': _profileImageBase64,
       });
 
       _showSnackBar('Profile updated successfully', Colors.green);
@@ -78,7 +86,28 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
     }
   }
 
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    try {
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 200, // Small for Base64 storage
+        maxHeight: 200,
+        imageQuality: 70,
+      );
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        setState(() {
+          _profileImageBase64 = base64Encode(bytes);
+        });
+      }
+    } catch (e) {
+      _showSnackBar('Could not pick image: $e', AppTheme.emergencyColor);
+    }
+  }
+
   void _showSnackBar(String message, Color color) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -112,7 +141,12 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
                                   CircleAvatar(
                                     radius: 60,
                                     backgroundColor: AppTheme.primaryColor.withOpacity(0.2),
-                                    child: const Icon(Icons.person, size: 70, color: AppTheme.primaryColor),
+                                    backgroundImage: _profileImageBase64.isNotEmpty 
+                                        ? MemoryImage(base64Decode(_profileImageBase64)) 
+                                        : null,
+                                    child: _profileImageBase64.isEmpty 
+                                        ? const Icon(Icons.person, size: 70, color: AppTheme.primaryColor)
+                                        : null,
                                   ),
                                   Positioned(
                                     bottom: 0,
@@ -122,7 +156,7 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
                                       backgroundColor: AppTheme.secondaryColor,
                                       child: IconButton(
                                         icon: const Icon(Icons.camera_alt_rounded, size: 18, color: Colors.white),
-                                        onPressed: () {},
+                                        onPressed: _pickImage,
                                       ),
                                     ),
                                   ),
@@ -164,9 +198,21 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
                                   const SizedBox(height: 20),
                                   _buildField(
                                     controller: _addressController,
-                                    label: 'Fixed Address',
+                                    label: 'Permanent Address',
                                     icon: Icons.home_outlined,
                                     maxLines: 2,
+                                  ),
+                                  const SizedBox(height: 20),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _buildField(
+                                          controller: _bloodTypeController,
+                                          label: 'Blood Type',
+                                          icon: Icons.bloodtype_outlined,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -225,6 +271,7 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
     _emailController.dispose();
     _contactController.dispose();
     _addressController.dispose();
+    _bloodTypeController.dispose();
     super.dispose();
   }
 }
