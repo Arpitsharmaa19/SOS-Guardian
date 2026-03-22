@@ -18,4 +18,5 @@ class ApiConfig {
   static String get sendSmsUrl => '$baseUrl/send-sms';
   static String get hqDashboardUrl => '$baseUrl/hq-dashboard';
   static String get hqResolveUrl => '$baseUrl/hq-resolve';
+  static String get hqHistoryUrl => '$baseUrl/hq-history';
 }

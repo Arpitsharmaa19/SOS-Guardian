@@ -204,6 +204,15 @@ app.post('/hq-resolve', (req, res) => {
     res.json({ success: true });
 });
 
+// 4. Police Endpoint: Fetch Resolved History
+app.get('/hq-history', (req, res) => {
+    // Return only resolved cases, sorted by latest first
+    const resolvedCases = Object.values(activeEmergencyRegistry)
+        .filter(c => c.status === 'resolved')
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    res.json({ history: resolvedCases });
+});
+
 app.post('/analyze-emotion', async (req, res) => {
     console.log(`[Alert Debug] Full Request Body:`, JSON.stringify(req.body));
     const { message, codeword, soundLevel } = req.body;

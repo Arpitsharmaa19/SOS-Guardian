@@ -1,3 +1,4 @@
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -563,43 +564,57 @@ class HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       key: _scaffoldKey,
       drawer: _buildDrawer(),
-      body: Container(
-        decoration: AppTheme.gradientBackground,
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildAppBar(),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const SizedBox(height: 40),
-                        FadeInDown(
-                          duration: const Duration(milliseconds: 800),
-                          child: _buildStatusCards(),
-                        ),
-                        const SizedBox(height: 60),
-                        ZoomIn(
-                          duration: const Duration(milliseconds: 1000),
-                          child: _buildSOSButton(),
-                        ),
-                        const SizedBox(height: 60),
-                        FadeInUp(
-                          duration: const Duration(milliseconds: 800),
-                          child: _buildFeedbackSection(),
-                        ),
-                        const SizedBox(height: 40),
-                      ],
+      body: Stack(
+        children: [
+          // 🛡️ THE SECURITY GRID BACKGROUND
+          Container(
+            decoration: AppTheme.gradientBackground,
+            child: Opacity(
+              opacity: 0.1,
+              child: CustomPaint(
+                painter: GridPainter(),
+                size: Size.infinite,
+              ),
+            ),
+          ),
+          
+          SafeArea(
+            child: Column(
+              children: [
+                _buildAppBar(),
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(height: 20),
+                          FadeInDown(
+                            duration: const Duration(milliseconds: 800),
+                            child: _buildStatusCards(),
+                          ),
+                          const SizedBox(height: 50),
+                          ZoomIn(
+                            duration: const Duration(milliseconds: 1000),
+                            child: _buildSOSButton(),
+                          ),
+                          const SizedBox(height: 50),
+                          FadeInUp(
+                            duration: const Duration(milliseconds: 800),
+                            child: _buildFeedbackSection(),
+                          ),
+                          const SizedBox(height: 40),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -610,42 +625,68 @@ class HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          IconButton(
-            icon: const Icon(Icons.menu_rounded, size: 30, color: Colors.white),
-            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+           GestureDetector(
+            onTap: () => _scaffoldKey.currentState?.openDrawer(),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.1)),
+              ),
+              child: const Icon(Icons.grid_view_rounded, size: 24, color: Colors.white),
+            ),
           ),
+          
+          Text(
+            'SOS GUARDIAN',
+            style: GoogleFonts.outfit(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 16,
+              letterSpacing: 2.5,
+            ),
+          ),
+
           // MASTER TOGGLE IN APP BAR
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: _servicesReady ? Colors.green.withOpacity(0.1) : Colors.white.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: _servicesReady ? Colors.green.withOpacity(0.3) : Colors.white10),
+              color: _servicesReady ? Colors.green.withOpacity(0.05) : Colors.white.withOpacity(0.03),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _servicesReady ? Colors.green.withOpacity(0.2) : Colors.white.withOpacity(0.05)),
             ),
             child: Row(
               children: [
-                Icon(
-                  _servicesReady ? Icons.check_circle_rounded : Icons.sensors_off_rounded,
-                  color: _servicesReady ? Colors.green : Colors.white24,
-                  size: 16,
+                Container(
+                  width: 6, height: 6,
+                  decoration: BoxDecoration(
+                    color: _servicesReady ? Colors.green : Colors.white24,
+                    shape: BoxShape.circle,
+                    boxShadow: _servicesReady ? [
+                      BoxShadow(color: Colors.green.withOpacity(0.5), blurRadius: 4, spreadRadius: 1)
+                    ] : [],
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  _servicesReady ? 'READY' : 'OFF',
+                  _servicesReady ? 'EYE ON' : 'OFF',
                   style: TextStyle(
                     color: _servicesReady ? Colors.green : Colors.white24,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1,
                   ),
                 ),
                 const SizedBox(width: 4),
                 Transform.scale(
-                  scale: 0.7,
+                  scale: 0.65,
                   child: Switch(
                     value: _servicesReady,
                     onChanged: _toggleServices,
                     activeColor: Colors.green,
                     inactiveTrackColor: Colors.white12,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ),
               ],
@@ -657,28 +698,34 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildStatusCards() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        _statusIndicator(
-          icon: Icons.location_on_rounded,
-          label: 'GPS',
-          isActive: _isLocationEnabled,
-          activeColor: Colors.blue,
-        ),
-        _statusIndicator(
-          icon: Icons.mic_rounded,
-          label: 'VOICE',
-          isActive: _isListening,
-          activeColor: Colors.green,
-        ),
-        _statusIndicator(
-          icon: Icons.notifications_active_rounded,
-          label: 'ALARM',
-          isActive: _isActivated,
-          activeColor: AppTheme.emergencyColor,
-        ),
-      ],
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: AppTheme.glassDecoration,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          _statusIndicator(
+            icon: Icons.gps_fixed_rounded,
+            label: 'GPS LOCK',
+            isActive: _isLocationEnabled,
+            activeColor: Colors.blueAccent,
+          ),
+          Container(width: 1, height: 30, color: Colors.white10),
+          _statusIndicator(
+            icon: Icons.mic_none_rounded,
+            label: 'VOICE AI',
+            isActive: _isListening,
+            activeColor: Colors.greenAccent,
+          ),
+          Container(width: 1, height: 30, color: Colors.white10),
+          _statusIndicator(
+            icon: Icons.shield_outlined,
+            label: 'SECURITY',
+            isActive: _isActivated,
+            activeColor: AppTheme.emergencyColor,
+          ),
+        ],
+      ),
     );
   }
 
@@ -728,55 +775,56 @@ class HomeScreenState extends State<HomeScreen> {
         children: [
           if (_isListening || _isActivated)
             _buildPulseEffect(_isActivated ? AppTheme.emergencyColor : AppTheme.primaryColor),
+          
+          // Outer Glow
           Container(
-            width: 220,
-            height: 220,
+            width: 240, height: 240,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withOpacity(0.05), width: 1),
+            ),
+          ),
+
+          Container(
+            width: 200,
+            height: 200,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: _isActivated ? AppTheme.emergencyColor : (_isListening ? AppTheme.primaryColor : AppTheme.emergencyColor),
               boxShadow: [
                 BoxShadow(
                   color: (_isActivated || !_isListening ? AppTheme.emergencyColor : AppTheme.primaryColor).withOpacity(0.4),
-                  blurRadius: 30,
-                  spreadRadius: 10,
+                  blurRadius: 40,
+                  spreadRadius: 2,
                 ),
               ],
-              gradient: RadialGradient(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
                 colors: [
                   (_isActivated || !_isListening ? AppTheme.emergencyColor : AppTheme.primaryColor),
-                  (_isActivated || !_isListening ? AppTheme.emergencyColor : AppTheme.primaryColor).withOpacity(0.8),
+                  (_isActivated || !_isListening ? const Color(0xFF640000) : const Color(0xFF003D4D)),
                 ],
               ),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  _isActivated ? Icons.warning_amber_rounded : (_isListening ? Icons.hearing_rounded : Icons.power_settings_new_rounded),
-                  size: 60,
+                 Icon(
+                  _isActivated ? Icons.shield_rounded : (_isListening ? Icons.hearing_rounded : Icons.power_settings_new_rounded),
+                  size: 50,
                   color: Colors.white,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Text(
-                  _isActivated ? 'ACTIVATED!' : (_isListening ? 'LISTENING...' : 'ACTIVATE\nSOS'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  _isActivated ? 'ACTIVE' : (_isListening ? 'LISTENING' : 'ACTIVATE'),
+                  style: GoogleFonts.outfit(
                     color: Colors.white,
-                    fontSize: 18,
+                    fontSize: 20,
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 1,
+                    letterSpacing: 2,
                   ),
                 ),
-                if (!_isListening && !_isActivated)
-                   const Padding(
-                     padding: EdgeInsets.only(top: 8.0),
-                     child: Text("(Hold for Manual SOS)", style: TextStyle(color: Colors.white54, fontSize: 10)),
-                   ),
-                if (_isActivated)
-                   const Padding(
-                     padding: EdgeInsets.only(top: 8.0),
-                     child: Text("(Tap to Reset)", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                   ),
               ],
             ),
           ),
@@ -888,81 +936,116 @@ class HomeScreenState extends State<HomeScreen> {
 
   Widget _buildDrawer() {
     return Drawer(
-      backgroundColor: AppTheme.backgroundColor,
-      child: Column(
-        children: [
-          _buildDrawerHeader(),
-          const SizedBox(height: 20),
-          _drawerItem(
-            icon: Icons.person_rounded,
-            title: 'My Profile',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const YourProfileScreen())),
-          ),
-          _drawerItem(
-            icon: Icons.vpn_key_rounded,
-            title: 'Set Code Word',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SetCodeWordScreen())),
-          ),
-          _drawerItem(
-            icon: Icons.contacts_rounded,
-            title: 'Emergency Contacts',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AddEmergencyContactsScreen())),
-          ),
-          _drawerItem(
-            icon: Icons.history_rounded,
-            title: 'SOS History',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => SOSHistoryScreen())),
-          ),
-          _drawerItem(
-            icon: Icons.electrical_services_rounded,
-            title: 'Test Alert System',
-            onTap: () {
-               Navigator.pop(context);
-               _testBackendConnection();
-            },
-          ),
-          const Divider(color: Colors.white10, indent: 20, endIndent: 20),
-          _drawerItem(
-            icon: Icons.logout_rounded,
-            title: 'Logout',
-            textColor: AppTheme.emergencyColor,
-            onTap: () {
-              FirebaseAuth.instance.signOut();
-              Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginScreen()), (route) => false);
-            },
-          ),
-          const Spacer(),
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Text(
-              'v1.0.0 - PRO EDITION',
-              style: TextStyle(color: AppTheme.subtleTextColor, fontSize: 10),
+      backgroundColor: const Color(0xFF040608),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(right: BorderSide(color: Colors.white.withOpacity(0.05))),
+        ),
+        child: Column(
+          children: [
+            _buildDrawerHeader(),
+            const SizedBox(height: 20),
+            _drawerItem(
+              icon: Icons.person_rounded,
+              title: 'MY PROFILE',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const YourProfileScreen())),
             ),
-          ),
-        ],
+            _drawerItem(
+              icon: Icons.vpn_key_rounded,
+              title: 'CODE WORDS',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SetCodeWordScreen())),
+            ),
+            _drawerItem(
+              icon: Icons.contacts_rounded,
+              title: 'EMERGENCY CONTACTS',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AddEmergencyContactsScreen())),
+            ),
+            _drawerItem(
+              icon: Icons.history_rounded,
+              title: 'INCIDENT LOGS',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SOSHistoryScreen())),
+            ),
+            _drawerItem(
+              icon: Icons.electrical_services_rounded,
+              title: 'SYSTEM TEST',
+              onTap: () {
+                 Navigator.pop(context);
+                 _testBackendConnection();
+              },
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20.0),
+              child: Divider(color: Colors.white10),
+            ),
+            _drawerItem(
+              icon: Icons.logout_rounded,
+              title: 'OFFLINE / LOGOUT',
+              textColor: AppTheme.emergencyColor,
+              onTap: () {
+                FirebaseAuth.instance.signOut();
+                Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginScreen()), (route) => false);
+              },
+            ),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8, height: 8,
+                    decoration: const BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'SOS GUARDIAN v1.0 PRO',
+                    style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildDrawerHeader() {
-    return UserAccountsDrawerHeader(
-      decoration: const BoxDecoration(
-        color: AppTheme.cardColor,
+    final user = FirebaseAuth.instance.currentUser;
+    return Container(
+      padding: const EdgeInsets.only(top: 60, left: 24, right: 24, bottom: 30),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.02)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppTheme.primaryColor.withOpacity(0.5))),
+            child: const CircleAvatar(
+              radius: 35,
+              backgroundColor: Colors.white12,
+              child: Icon(Icons.person_rounded, color: Colors.white, size: 40),
+            ),
+          ),
+          const SizedBox(height: 20),
+          StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance.collection('users').doc(user?.uid).snapshots(),
+            builder: (context, snapshot) {
+              String name = "SECURE USER";
+              if (snapshot.hasData && snapshot.data!.exists) {
+                name = (snapshot.data!['name'] ?? name).toString().toUpperCase();
+              }
+              return Text(
+                name,
+                style: GoogleFonts.outfit(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 1),
+              );
+            },
+          ),
+          Text(
+            user?.email?.toUpperCase() ?? 'OFFLINE',
+            style: const TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+          ),
+        ],
       ),
-      currentAccountPicture: const CircleAvatar(
-        backgroundColor: AppTheme.primaryColor,
-        child: Icon(Icons.person, color: Colors.white, size: 40),
-      ),
-      accountName: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser?.uid).snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasData && snapshot.data!.exists) {
-             return Text(snapshot.data!['name'] ?? 'User', style: const TextStyle(fontWeight: FontWeight.bold));
-          }
-          return const Text('Loading...');
-        },
-      ),
-      accountEmail: Text(FirebaseAuth.instance.currentUser?.email ?? ''),
     );
   }
 
@@ -973,12 +1056,37 @@ class HomeScreenState extends State<HomeScreen> {
     Color? textColor,
   }) {
     return ListTile(
-      leading: Icon(icon, color: textColor ?? Colors.white70),
+      leading: Icon(icon, color: textColor ?? Colors.white54, size: 22),
       title: Text(
         title,
-        style: TextStyle(color: textColor ?? Colors.white, fontWeight: FontWeight.w500),
+        style: GoogleFonts.outfit(
+          color: textColor ?? Colors.white, 
+          fontSize: 13, 
+          fontWeight: FontWeight.w900,
+          letterSpacing: 1,
+        ),
       ),
       onTap: onTap,
     );
   }
+}
+
+class GridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(0.2)
+      ..strokeWidth = 0.5;
+
+    const spacing = 40.0;
+    for (var i = 0.0; i < size.width; i += spacing) {
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
+    }
+    for (var i = 0.0; i < size.height; i += spacing) {
+      canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

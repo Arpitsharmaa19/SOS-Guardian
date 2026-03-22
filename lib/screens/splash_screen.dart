@@ -1,3 +1,4 @@
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -64,73 +65,132 @@ class SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: AppTheme.gradientBackground,
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ZoomIn(
-                duration: const Duration(seconds: 1),
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.primaryColor.withOpacity(0.5),
-                        blurRadius: 30,
-                        spreadRadius: 5,
+      body: Stack(
+        children: [
+          // 🛡️ SECURITY GRID BACKGROUND
+          Container(
+            decoration: AppTheme.gradientBackground,
+            child: Opacity(
+              opacity: 0.1,
+              child: CustomPaint(
+                painter: SplashGridPainter(),
+                size: Size.infinite,
+              ),
+            ),
+          ),
+          
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ZoomIn(
+                  duration: const Duration(seconds: 1),
+                  child: Container(
+                    padding: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.primaryColor.withOpacity(0.3),
+                          blurRadius: 100,
+                          spreadRadius: 10,
+                        ),
+                        BoxShadow(
+                          color: AppTheme.secondaryColor.withOpacity(0.2),
+                          blurRadius: 50,
+                          spreadRadius: 5,
+                        ),
+                      ],
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: AppTheme.glassDecoration.copyWith(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppTheme.primaryColor.withOpacity(0.3), width: 2),
+                      ),
+                      child: const Icon(
+                        Icons.shield_rounded,
+                        size: 100,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 50),
+                FadeInUp(
+                  duration: const Duration(seconds: 1),
+                  delay: const Duration(milliseconds: 500),
+                  child: Column(
+                    children: [
+                      Text(
+                        'SOS GUARDIAN',
+                        style: GoogleFonts.outfit(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 32,
+                          letterSpacing: 4,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'ELITE SECURITY CONSOLE',
+                        style: GoogleFonts.outfit(
+                          color: AppTheme.primaryColor,
+                          letterSpacing: 4,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.shield_rounded,
-                    size: 80,
-                    color: AppTheme.primaryColor,
+                ),
+                const SizedBox(height: 120),
+                FadeIn(
+                  duration: const Duration(seconds: 2),
+                  child: Column(
+                    children: [
+                      const SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+                          strokeWidth: 2,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'SECURE CONNECTION...',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.3),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 30),
-              FadeInUp(
-                duration: const Duration(seconds: 1),
-                delay: const Duration(milliseconds: 500),
-                child: Column(
-                  children: [
-                    Text(
-                      'SOS GUARDIAN',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 4,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'YOUR VIRTUAL PROTECTOR',
-                      style: TextStyle(
-                        color: AppTheme.subtleTextColor,
-                        letterSpacing: 2,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 100),
-              FadeIn(
-                duration: const Duration(seconds: 2),
-                child: const CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
-                  strokeWidth: 2,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
+}
+
+class SplashGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.white.withOpacity(0.12)..strokeWidth = 0.5;
+    const spacing = 60.0;
+    for (var i = 0.0; i < size.width; i += spacing) {
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
+    }
+    for (var i = 0.0; i < size.height; i += spacing) {
+      canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
+    }
+  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

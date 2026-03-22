@@ -1,3 +1,4 @@
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -71,75 +72,184 @@ class SetCodeWordScreenState extends State<SetCodeWordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Set Secret Codeword')),
-      body: Container(
-        decoration: AppTheme.gradientBackground,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 30.0),
+      body: Stack(
+        children: [
+          // 🛡️ SECURITY GRID BACKGROUND
+          Container(
+            decoration: AppTheme.gradientBackground,
+            child: Opacity(
+              opacity: 0.1,
+              child: CustomPaint(
+                painter: CodeGridPainter(),
+                size: Size.infinite,
+              ),
+            ),
+          ),
+          
+          SafeArea(
             child: Column(
               children: [
-                const SizedBox(height: 40),
-                FadeInDown(
-                  child: Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: AppTheme.cardColor,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withOpacity(0.05)),
-                    ),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.security_rounded, size: 60, color: AppTheme.primaryColor),
-                        const SizedBox(height: 20),
-                        Text(
-                          'Your Emergency Trigger',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'When spoken, this word will instantly trigger all SOS alerts and share your location.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: AppTheme.subtleTextColor),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 40),
-                FadeInUp(
-                  child: Column(
-                    children: [
-                      TextField(
-                        controller: _codeWordController,
-                        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2),
-                        textAlign: TextAlign.center,
-                        decoration: InputDecoration(
-                          hintText: 'e.g. HELP',
-                          hintStyle: TextStyle(color: Colors.white12),
-                          helperText: 'Choose a word that is easy to speak in an emergency',
-                          helperStyle: TextStyle(color: AppTheme.subtleTextColor),
-                        ),
-                      ),
-                      const SizedBox(height: 40),
-                      _isLoading
-                        ? const CircularProgressIndicator(color: AppTheme.primaryColor)
-                        : SizedBox(
-                            width: double.infinity,
-                            height: 60,
-                            child: ElevatedButton(
-                              onPressed: _saveCodeWord,
-                              child: const Text('SAVE CODEWORD', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                _buildAppBar(),
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 30.0),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 30),
+                          FadeInDown(
+                            child: Container(
+                              padding: const EdgeInsets.all(32),
+                              decoration: AppTheme.glassDecoration,
+                              child: Column(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primaryColor.withOpacity(0.05),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2)),
+                                    ),
+                                    child: const Icon(Icons.psychology_rounded, size: 50, color: AppTheme.primaryColor),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  Text(
+                                    'EMERGENCY TRIGGER',
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 18,
+                                      letterSpacing: 2,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  const Text(
+                                    'WHEN SPOKEN, THIS WORD ACTIVATES THE GLOBAL SOS NETWORK INSTANTLY.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.white24,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                    ],
+                          const SizedBox(height: 50),
+                          FadeInUp(
+                            child: Column(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 20),
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      bottom: BorderSide(color: AppTheme.primaryColor.withOpacity(0.3), width: 2),
+                                      top: BorderSide(color: AppTheme.primaryColor.withOpacity(0.1), width: 1),
+                                    ),
+                                  ),
+                                  child: TextField(
+                                    controller: _codeWordController,
+                                    style: GoogleFonts.outfit(
+                                      color: AppTheme.primaryColor,
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 8,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    textCapitalization: TextCapitalization.characters,
+                                    decoration: const InputDecoration(
+                                      hintText: 'CODEWORD',
+                                      hintStyle: TextStyle(color: Colors.white10, letterSpacing: 4),
+                                      border: InputBorder.none,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 15),
+                                const Text(
+                                  'CHOOSE A SIMPLE, CLEAR WORD',
+                                  style: TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                ),
+                                const SizedBox(height: 60),
+                                _isLoading
+                                  ? const CircularProgressIndicator(color: AppTheme.primaryColor)
+                                  : SizedBox(
+                                      width: double.infinity,
+                                      height: 60,
+                                      child: ElevatedButton(
+                                        onPressed: _saveCodeWord,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppTheme.primaryColor,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                        ),
+                                        child: const Text('ENCRYPT & SAVE', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
+                                      ),
+                                    ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
+
+  Widget _buildAppBar() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.1)),
+              ),
+              child: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.white),
+            ),
+          ),
+          Text(
+             'SECURITY KEY',
+            style: GoogleFonts.outfit(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 16,
+              letterSpacing: 2.5,
+            ),
+          ),
+          const SizedBox(width: 40),
+        ],
+      ),
+    );
+  }
+}
+
+class CodeGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.white.withOpacity(0.12)..strokeWidth = 0.5;
+    const spacing = 50.0;
+    for (var i = 0.0; i < size.width; i += spacing) {
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
+    }
+    for (var i = 0.0; i < size.height; i += spacing) {
+      canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
+    }
+  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

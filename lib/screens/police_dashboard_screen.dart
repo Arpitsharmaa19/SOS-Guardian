@@ -1,3 +1,4 @@
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -19,15 +20,21 @@ class PoliceDashboardScreen extends StatefulWidget {
 
 class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
   List<dynamic> _activeEmergencies = [];
+  List<dynamic> _historyEmergencies = [];
   Timer? _refreshTimer;
   bool _isFetching = false;
+  bool _showHistory = false;
 
   @override
   void initState() {
     super.initState();
     _fetchEmergencies();
-    // Poll HQ server every 5 seconds for absolute speed without Firebase rules
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) => _fetchEmergencies());
+    _fetchHistory();
+    // Poll HQ server every 5 seconds
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _fetchEmergencies();
+      if (_showHistory) _fetchHistory();
+    });
   }
 
   @override
@@ -54,6 +61,22 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
     }
   }
 
+  Future<void> _fetchHistory() async {
+    try {
+      final response = await http.get(Uri.parse(ApiConfig.hqHistoryUrl));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (mounted) {
+          setState(() {
+            _historyEmergencies = data['history'] ?? [];
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("History Fetch Error: $e");
+    }
+  }
+
   Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
@@ -75,6 +98,7 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
       body: jsonEncode({'userId': userId}),
     );
     _fetchEmergencies(); // Refresh instantly
+    _fetchHistory(); 
   }
 
   @override
@@ -113,8 +137,11 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
         child: Column(
           children: [
             _buildStatBar(),
+            _buildToggle(),
             Expanded(
-              child: _activeEmergencies.isEmpty ? _buildEmptyState() : _buildEmergencyList(),
+              child: _showHistory 
+                ? (_historyEmergencies.isEmpty ? _buildEmptyState() : _buildEmergencyList(_historyEmergencies))
+                : (_activeEmergencies.isEmpty ? _buildEmptyState() : _buildEmergencyList(_activeEmergencies)),
             ),
           ],
         ),
@@ -122,16 +149,60 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
     );
   }
 
+  Widget _buildToggle() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      child: Container(
+        height: 50,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Row(
+          children: [
+            _toggleItem('LIVE DISPATCH', !_showHistory),
+            _toggleItem('INCIDENT LOGS', _showHistory),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _toggleItem(String title, bool isActive) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _showHistory = !isActive ? !_showHistory : _showHistory),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isActive ? Colors.blueAccent.withOpacity(0.2) : Colors.transparent,
+            borderRadius: BorderRadius.circular(15),
+            border: isActive ? Border.all(color: Colors.blueAccent.withOpacity(0.5)) : null,
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            title,
+            style: TextStyle(
+              color: isActive ? Colors.white : Colors.white38,
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+              letterSpacing: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildStatBar() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.only(left: 20, right: 20, top: 10),
       child: FadeInDown(
         duration: const Duration(milliseconds: 500),
         child: Row(
           children: [
             _statItem('ACTIVE SOS', _activeEmergencies.length.toString(), Colors.redAccent),
             const SizedBox(width: 12),
-            _statItem('DEPT STATUS', 'READY', Colors.blueAccent),
+            _statItem('RESOLVED', _historyEmergencies.length.toString(), Colors.greenAccent),
           ],
         ),
       ),
@@ -164,22 +235,24 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.radar_rounded, size: 100, color: Colors.white.withOpacity(0.05)),
+          Icon(_showHistory ? Icons.history_rounded : Icons.radar_rounded, size: 80, color: Colors.white.withOpacity(0.05)),
           const SizedBox(height: 20),
-          Text('SCANNING FOR SIGNALS...', style: TextStyle(color: Colors.white24, fontWeight: FontWeight.w900, letterSpacing: 2)),
+          Text(_showHistory ? 'NO PAST LOGS FOUND' : 'SCANNING FOR SIGNALS...', 
+               style: TextStyle(color: Colors.white24, fontWeight: FontWeight.w900, letterSpacing: 2)),
         ],
       ),
     );
   }
 
-  Widget _buildEmergencyList() {
+  Widget _buildEmergencyList(List<dynamic> list) {
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: _activeEmergencies.length,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      itemCount: list.length,
       itemBuilder: (context, index) {
-        final data = _activeEmergencies[index];
+        final data = list[index];
         bool isMedical = data['emotion'].toString().toLowerCase().contains('medical');
         Color cardColor = isMedical ? Colors.orangeAccent : Colors.redAccent;
+        if (_showHistory) cardColor = Colors.greenAccent;
 
         return FadeInUp(
           duration: const Duration(milliseconds: 400),
@@ -224,7 +297,7 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
                                   Text(data['userName']?.toUpperCase() ?? 'UNKNOWN VICTIM', 
                                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
                                   const Spacer(),
-                                  _badge('URGENT', cardColor),
+                                  _badge(_showHistory ? 'RESOLVED' : 'URGENT', cardColor),
                                 ],
                               ),
                               const SizedBox(height: 4),
@@ -269,21 +342,23 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
                         Expanded(
                           child: ElevatedButton.icon(
                             onPressed: () => _openMap(data['lat'], data['lng']),
-                            icon: const Icon(Icons.near_me_rounded, size: 16),
-                            label: const Text('TRACK LIVE', style: TextStyle(fontWeight: FontWeight.w900)),
+                            icon: Icon(_showHistory ? Icons.map_rounded : Icons.near_me_rounded, size: 16),
+                            label: Text(_showHistory ? 'VIEW INCIDENT LOCATION' : 'TRACK LIVE', style: const TextStyle(fontWeight: FontWeight.w900)),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: cardColor,
-                              foregroundColor: Colors.white,
+                              foregroundColor: Colors.white.withOpacity(0.9),
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        IconButton(
-                          icon: const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 28),
-                          onPressed: () => _resolveSOS(data['userId']),
-                        ),
+                        if (!_showHistory) ...[
+                          const SizedBox(width: 12),
+                          IconButton(
+                            icon: const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 28),
+                            onPressed: () => _resolveSOS(data['userId']),
+                          ),
+                        ],
                       ],
                     ),
                   ],

@@ -1,3 +1,4 @@
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -66,141 +67,158 @@ class _SOSHistoryScreenState extends State<SOSHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: AppTheme.gradientBackground,
-        child: Column(
-          children: [
-            _buildHeader(context),
-            Expanded(
-              child: _isLoading 
-                ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
-                : _history.isEmpty 
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      itemCount: _history.length,
-                      itemBuilder: (context, index) {
-                        final data = _history[index] as Map<String, dynamic>;
-                        final DateTime timestamp = DateTime.parse(data['timestamp']);
-                        final String type = data['type'] ?? 'Automated';
-                        
-                        // Map emotion keyword to emoji
-                        String emotionEmoji = '🚨';
-                        if (type.contains('Terror')) emotionEmoji = '😱';
-                        else if (type.contains('Anger')) emotionEmoji = '🛑';
-                        else if (type.contains('Pain')) emotionEmoji = '🤕';
-                        else if (type.contains('Sadness') || type.contains('Despair')) emotionEmoji = '🤫';
-                        else if (type.contains('Distress')) emotionEmoji = '🆘';
+      body: Stack(
+        children: [
+          // 🛡️ SECURITY GRID BACKGROUND
+          Container(
+            decoration: AppTheme.gradientBackground,
+            child: Opacity(
+              opacity: 0.1,
+              child: CustomPaint(
+                painter: HistoryGridPainter(),
+                size: Size.infinite,
+              ),
+            ),
+          ),
+          
+          SafeArea(
+            child: Column(
+              children: [
+                _buildAppBar(),
+                Expanded(
+                  child: _isLoading 
+                    ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+                    : _history.isEmpty 
+                      ? _buildEmptyState()
+                      : ListView.builder(
+                          physics: const BouncingScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          itemCount: _history.length,
+                          itemBuilder: (context, index) {
+                            final data = _history[index] as Map<String, dynamic>;
+                            final DateTime timestamp = DateTime.parse(data['timestamp']);
+                            final String type = data['type'] ?? 'AUTOMATED';
+                            
+                            String emotionEmoji = '🚨';
+                            if (type.contains('Terror')) emotionEmoji = '😱';
+                            else if (type.contains('Anger')) emotionEmoji = '🛑';
+                            else if (type.contains('Pain')) emotionEmoji = '🤕';
+                            else if (type.contains('Sadness') || type.contains('Despair')) emotionEmoji = '🤫';
+                            else if (type.contains('Distress')) emotionEmoji = '🆘';
 
-                        return FadeInUp(
-                          duration: Duration(milliseconds: 200 + (index * 50)),
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 16),
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: AppTheme.cardColor.withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(color: Colors.white.withOpacity(0.05)),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.emergencyColor.withOpacity(0.1),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: AppTheme.emergencyColor.withOpacity(0.2)),
-                                  ),
-                                  child: Text(emotionEmoji, style: const TextStyle(fontSize: 24)),
-                                ),
-                                const SizedBox(width: 20),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                            return FadeInUp(
+                              duration: Duration(milliseconds: 200 + (index * 50)),
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 16),
+                                decoration: AppTheme.glassDecoration,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(20),
+                                  child: Row(
                                     children: [
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          const Text(
-                                            'SOS ALERT',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w900,
-                                              fontSize: 16,
-                                              letterSpacing: 1,
-                                            ),
-                                          ),
-                                          Text(
-                                            DateFormat('hh:mm a').format(timestamp),
-                                            style: const TextStyle(
-                                              color: AppTheme.primaryColor,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.emergencyColor.withOpacity(0.05),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: AppTheme.emergencyColor.withOpacity(0.1)),
+                                        ),
+                                        child: Text(emotionEmoji, style: const TextStyle(fontSize: 22)),
                                       ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        type,
-                                        style: const TextStyle(color: AppTheme.subtleTextColor, fontSize: 13, fontWeight: FontWeight.w500),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        DateFormat('dd MMM yyyy').format(timestamp),
-                                        style: const TextStyle(color: Colors.white30, fontSize: 11),
+                                      const SizedBox(width: 20),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text(
+                                                  'SOS REPORT',
+                                                  style: GoogleFonts.outfit(
+                                                    color: AppTheme.emergencyColor,
+                                                    fontWeight: FontWeight.w900,
+                                                    fontSize: 14,
+                                                    letterSpacing: 2,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  DateFormat('HH:mm').format(timestamp),
+                                                  style: const TextStyle(
+                                                    color: AppTheme.primaryColor,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 11,
+                                                    letterSpacing: 1,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              type.toUpperCase(),
+                                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              DateFormat('dd MMM yyyy').format(timestamp).toUpperCase(),
+                                              style: const TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.only(top: 60, left: 10, right: 20, bottom: 30),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Incident Logs',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1,
-                  ),
-                ),
-                Text(
-                  'Stored safely on this device',
-                  style: const TextStyle(
-                    color: AppTheme.subtleTextColor,
-                    fontSize: 13,
-                  ),
+                              ),
+                            );
+                          },
+                        ),
                 ),
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.delete_sweep_rounded, color: AppTheme.emergencyColor),
-            onPressed: _clearHistory,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppBar() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.1)),
+              ),
+              child: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.white),
+            ),
+          ),
+          Text(
+            'LOG ARCHIVE',
+            style: GoogleFonts.outfit(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 16,
+              letterSpacing: 2.5,
+            ),
+          ),
+          GestureDetector(
+            onTap: _clearHistory,
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.emergencyColor.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.emergencyColor.withOpacity(0.1)),
+              ),
+              child: const Icon(Icons.delete_sweep_rounded, size: 22, color: AppTheme.emergencyColor),
+            ),
           ),
         ],
       ),
@@ -213,25 +231,42 @@ class _SOSHistoryScreenState extends State<SOSHistoryScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(30),
+            padding: const EdgeInsets.all(40),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
+              color: Colors.white.withOpacity(0.02),
               shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withOpacity(0.05)),
             ),
-            child: const Icon(Icons.history_rounded, size: 80, color: Colors.white10),
+            child: const Icon(Icons.folder_off_outlined, size: 60, color: Colors.white10),
           ),
           const SizedBox(height: 24),
-          const Text(
-            'Secure & Clear',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          Text(
+            'ARCHIVE EMPTY',
+            style: GoogleFonts.outfit(color: Colors.white30, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 2),
           ),
           const SizedBox(height: 8),
           const Text(
-            'No local incidents recorded yet.',
-            style: TextStyle(color: AppTheme.subtleTextColor, fontSize: 14),
+            'NO INCIDENT DATA RECORDED ON THIS UNIT.',
+            style: TextStyle(color: Colors.white10, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
           ),
         ],
       ),
     );
   }
+}
+
+class HistoryGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.white.withOpacity(0.12)..strokeWidth = 0.5;
+    const spacing = 50.0;
+    for (var i = 0.0; i < size.width; i += spacing) {
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
+    }
+    for (var i = 0.0; i < size.height; i += spacing) {
+      canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
+    }
+  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

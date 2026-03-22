@@ -1,7 +1,7 @@
 plugins {
     id "com.android.application"
     // START: FlutterFire Configuration
-    id 'com.google.gms.google-services'
+    // id 'com.google.gms.google-services'
     // END: FlutterFire Configuration
     id "kotlin-android"
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -10,7 +10,7 @@ plugins {
 
 android {
     namespace = "com.sosguardian.app"
-    compileSdkVersion 34
+    compileSdkVersion 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -26,7 +26,7 @@ android {
         applicationId = "com.sosguardian.app"
 
         minSdkVersion flutter.minSdkVersion
-        targetSdkVersion 34
+        targetSdkVersion 36
         versionCode flutter.versionCode
         versionName flutter.versionName
     }

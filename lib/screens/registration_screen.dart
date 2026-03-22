@@ -1,3 +1,4 @@
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -102,145 +103,153 @@ class RegistrationScreenState extends State<RegistrationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: AppTheme.gradientBackground,
-        child: SafeArea(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 30.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 30),
-                  FadeInLeft(
-                    child: IconButton(
-                      icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  FadeInDown(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Join SOS Guardian',
-                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Start your premium protection journey today',
-                          style: TextStyle(
-                            color: AppTheme.subtleTextColor,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-                  FadeInUp(
-                    duration: const Duration(milliseconds: 800),
-                    child: Column(
-                      children: [
-                          _buildInputField(
-                            controller: _nameController,
-                            label: _selectedRole == 'police' ? 'Officer / Dept Name' : 'Full Name',
-                            icon: Icons.person_outline_rounded,
-                          ),
-                          if (_selectedRole == 'citizen') ...[
-                            const SizedBox(height: 20),
-                            _buildInputField(
-                              controller: _emailController,
-                              label: 'Email Address',
-                              icon: Icons.email_outlined,
-                              keyboardType: TextInputType.emailAddress,
-                            ),
-                            const SizedBox(height: 20),
-                            _buildInputField(
-                              controller: _phoneController,
-                              label: 'Phone Number',
-                              icon: Icons.phone_android_rounded,
-                              keyboardType: TextInputType.phone,
-                            ),
-                          ],
-                          const SizedBox(height: 20),
-                        _buildInputField(
-                          controller: _passwordController,
-                          label: 'Password',
-                          icon: Icons.lock_open_rounded,
-                          obscureText: true,
-                        ),
-                        const SizedBox(height: 30),
-                        // ROLE SELECTION
-                        Row(
-                          children: [
-                            const Text('REGISTER AS:', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
-                            const SizedBox(width: 15),
-                            _roleChip('Citizen', 'citizen', Icons.person_outline),
-                            const SizedBox(width: 10),
-                            _roleChip('Police', 'police', Icons.shield_outlined),
-                          ],
-                        ),
-                        const SizedBox(height: 40),
-                        _isLoading
-                          ? const CircularProgressIndicator(color: AppTheme.primaryColor)
-                          : Container(
-                              width: double.infinity,
-                              height: 55,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(15),
-                                gradient: const LinearGradient(
-                                  colors: [AppTheme.secondaryColor, AppTheme.primaryColor],
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppTheme.secondaryColor.withOpacity(0.3),
-                                    blurRadius: 15,
-                                    offset: const Offset(0, 5),
-                                  ),
-                                ],
-                              ),
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.transparent,
-                                  shadowColor: Colors.transparent,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                                ),
-                                onPressed: _register,
-                                child: const Text(
-                                  'CREATE ACCOUNT',
-                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ),
-                        const SizedBox(height: 30),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              "Already a member?",
-                              style: TextStyle(color: AppTheme.subtleTextColor),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                              },
-                              child: const Text('Login', style: TextStyle(color: AppTheme.secondaryColor, fontWeight: FontWeight.bold)),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+      body: Stack(
+        children: [
+          // 🛡️ SECURITY GRID BACKGROUND
+          Container(
+            decoration: AppTheme.gradientBackground,
+            child: Opacity(
+              opacity: 0.1,
+              child: CustomPaint(
+                painter: RegGridPainter(),
+                size: Size.infinite,
               ),
             ),
           ),
-        ),
+          
+          SafeArea(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 30.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 10),
+                    FadeInLeft(
+                      child: IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    FadeInDown(
+                      duration: const Duration(milliseconds: 800),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'JOIN THE GUARDIANS',
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              fontSize: 28,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'SECURE YOUR DIGITAL SHIELD TODAY',
+                            style: TextStyle(
+                              color: AppTheme.primaryColor,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+                    
+                    FadeInUp(
+                      duration: const Duration(milliseconds: 800),
+                      child: Column(
+                        children: [
+                            // ROLE SELECTION
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.03),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _roleChip('CITIZEN', 'citizen', Icons.person_rounded),
+                                  _roleChip('POLICE', 'police', Icons.admin_panel_settings_rounded),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 30),
+
+                            _buildInputField(
+                              controller: _nameController,
+                              label: _selectedRole == 'police' ? 'OFFICER / DEPT NAME' : 'FULL LEGAL NAME',
+                              icon: Icons.person_outline_rounded,
+                            ),
+                            if (_selectedRole == 'citizen') ...[
+                              const SizedBox(height: 20),
+                              _buildInputField(
+                                controller: _emailController,
+                                label: 'IDENTIFIER (EMAIL)',
+                                icon: Icons.alternate_email_rounded,
+                                keyboardType: TextInputType.emailAddress,
+                              ),
+                              const SizedBox(height: 20),
+                              _buildInputField(
+                                controller: _phoneController,
+                                label: 'SECURE PHONE NUMBER',
+                                icon: Icons.phone_android_rounded,
+                                keyboardType: TextInputType.phone,
+                              ),
+                            ],
+                            const SizedBox(height: 20),
+                          _buildInputField(
+                            controller: _passwordController,
+                            label: 'ACCESS KEY (PASSWORD)',
+                            icon: Icons.vpn_key_rounded,
+                            obscureText: true,
+                          ),
+                          const SizedBox(height: 40),
+                          
+                          _isLoading
+                            ? const CircularProgressIndicator(color: AppTheme.primaryColor)
+                            : SizedBox(
+                                width: double.infinity,
+                                height: 60,
+                                child: ElevatedButton(
+                                  onPressed: _register,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.primaryColor,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                    elevation: 20,
+                                    shadowColor: AppTheme.primaryColor.withOpacity(0.5),
+                                  ),
+                                  child: const Text('INITIALIZE ACCOUNT', style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.w900)),
+                                ),
+                              ),
+                              
+                          const SizedBox(height: 30),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text("ALREADY SECURED?", style: TextStyle(color: Colors.white24, fontSize: 11, fontWeight: FontWeight.bold)),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('LOGIN', style: TextStyle(color: AppTheme.primaryColor, fontSize: 11, fontWeight: FontWeight.w900)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -251,17 +260,25 @@ class RegistrationScreenState extends State<RegistrationScreen> {
       onTap: () => setState(() => _selectedRole = role),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.secondaryColor : Colors.white12,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isSelected ? AppTheme.secondaryColor : Colors.white24),
+          color: isSelected ? AppTheme.primaryColor : Colors.transparent,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: isSelected ? [BoxShadow(color: AppTheme.primaryColor.withOpacity(0.2), blurRadius: 10)] : [],
         ),
         child: Row(
           children: [
-            Icon(icon, size: 16, color: isSelected ? Colors.white : Colors.white54),
-            const SizedBox(width: 6),
-            Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.white54, fontWeight: FontWeight.bold, fontSize: 13)),
+            Icon(icon, size: 16, color: isSelected ? Colors.black : Colors.white24),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.black : Colors.white24,
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1,
+              ),
+            ),
           ],
         ),
       ),
@@ -275,15 +292,41 @@ class RegistrationScreenState extends State<RegistrationScreen> {
     bool obscureText = false,
     TextInputType keyboardType = TextInputType.text,
   }) {
-    return TextField(
-      controller: controller,
-      obscureText: obscureText,
-      keyboardType: keyboardType,
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: AppTheme.secondaryColor),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: obscureText,
+        keyboardType: keyboardType,
+        style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+          prefixIcon: Icon(icon, color: AppTheme.primaryColor, size: 20),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.all(20),
+        ),
       ),
     );
   }
+}
+
+class RegGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.white.withOpacity(0.15)..strokeWidth = 0.5;
+    const spacing = 50.0;
+    for (var i = 0.0; i < size.width; i += spacing) {
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
+    }
+    for (var i = 0.0; i < size.height; i += spacing) {
+      canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
+    }
+  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

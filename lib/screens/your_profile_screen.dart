@@ -1,3 +1,4 @@
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -120,124 +121,192 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile Settings')),
-      body: Container(
-        decoration: AppTheme.gradientBackground,
-        child: SafeArea(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
-              : SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 20),
-                          FadeInDown(
-                            child: Center(
-                              child: Stack(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 60,
-                                    backgroundColor: AppTheme.primaryColor.withOpacity(0.2),
-                                    backgroundImage: _profileImageBase64.isNotEmpty 
-                                        ? MemoryImage(base64Decode(_profileImageBase64)) 
-                                        : null,
-                                    child: _profileImageBase64.isEmpty 
-                                        ? const Icon(Icons.person, size: 70, color: AppTheme.primaryColor)
-                                        : null,
-                                  ),
-                                  Positioned(
-                                    bottom: 0,
-                                    right: 0,
-                                    child: CircleAvatar(
-                                      radius: 20,
-                                      backgroundColor: AppTheme.secondaryColor,
-                                      child: IconButton(
-                                        icon: const Icon(Icons.camera_alt_rounded, size: 18, color: Colors.white),
-                                        onPressed: _pickImage,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 40),
-                          FadeInUp(
-                            child: Container(
-                              padding: const EdgeInsets.all(24),
-                              decoration: BoxDecoration(
-                                color: AppTheme.cardColor,
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(color: Colors.white.withOpacity(0.05)),
-                              ),
+      body: Stack(
+        children: [
+          // 🛡️ SECURITY GRID BACKGROUND
+          Container(
+            decoration: AppTheme.gradientBackground,
+            child: Opacity(
+              opacity: 0.1,
+              child: CustomPaint(
+                painter: ProfileGridPainter(),
+                size: Size.infinite,
+              ),
+            ),
+          ),
+          
+          SafeArea(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+                : Column(
+                    children: [
+                      _buildAppBar(),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Form(
+                              key: _formKey,
                               child: Column(
                                 children: [
-                                  _buildField(
-                                    controller: _nameController,
-                                    label: 'Full Name',
-                                    icon: Icons.person_outline_rounded,
-                                    validator: (v) => v!.isEmpty ? 'Name required' : null,
-                                  ),
-                                  const SizedBox(height: 20),
-                                  _buildField(
-                                    controller: _emailController,
-                                    label: 'Email Address',
-                                    icon: Icons.email_outlined,
-                                    readOnly: true,
-                                  ),
-                                  const SizedBox(height: 20),
-                                  _buildField(
-                                    controller: _contactController,
-                                    label: 'Phone Number',
-                                    icon: Icons.phone_android_rounded,
-                                    keyboardType: TextInputType.phone,
-                                  ),
-                                  const SizedBox(height: 20),
-                                  _buildField(
-                                    controller: _addressController,
-                                    label: 'Permanent Address',
-                                    icon: Icons.home_outlined,
-                                    maxLines: 2,
-                                  ),
-                                  const SizedBox(height: 20),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _buildField(
-                                          controller: _bloodTypeController,
-                                          label: 'Blood Type',
-                                          icon: Icons.bloodtype_outlined,
-                                        ),
+                                  FadeInDown(
+                                    child: Center(
+                                      child: Stack(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: AppTheme.primaryColor.withOpacity(0.5), width: 2),
+                                            ),
+                                            child: CircleAvatar(
+                                              radius: 65,
+                                              backgroundColor: Colors.white.withOpacity(0.05),
+                                              backgroundImage: _profileImageBase64.isNotEmpty 
+                                                  ? MemoryImage(base64Decode(_profileImageBase64)) 
+                                                  : null,
+                                              child: _profileImageBase64.isEmpty 
+                                                  ? const Icon(Icons.person_rounded, size: 70, color: Colors.white24)
+                                                  : null,
+                                            ),
+                                          ),
+                                          Positioned(
+                                            bottom: 5,
+                                            right: 5,
+                                            child: GestureDetector(
+                                              onTap: _pickImage,
+                                              child: Container(
+                                                padding: const EdgeInsets.all(10),
+                                                decoration: const BoxDecoration(
+                                                  color: AppTheme.primaryColor,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(Icons.camera_alt_rounded, size: 20, color: Colors.black),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ],
+                                    ),
                                   ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    'GUARDIAN IDENTITY',
+                                    style: GoogleFonts.outfit(
+                                      color: AppTheme.primaryColor,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 12,
+                                      letterSpacing: 2,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 40),
+                                  
+                                  FadeInUp(
+                                    child: Container(
+                                      padding: const EdgeInsets.all(24),
+                                      decoration: AppTheme.glassDecoration,
+                                      child: Column(
+                                        children: [
+                                          _buildField(
+                                            controller: _nameController,
+                                            label: 'FULL LEGAL NAME',
+                                            icon: Icons.person_outline_rounded,
+                                            validator: (v) => v!.isEmpty ? 'Name required' : null,
+                                          ),
+                                          const SizedBox(height: 24),
+                                          _buildField(
+                                            controller: _emailController,
+                                            label: 'SECURE EMAIL (LOCKED)',
+                                            icon: Icons.shield_outlined,
+                                            readOnly: true,
+                                          ),
+                                          const SizedBox(height: 24),
+                                          _buildField(
+                                            controller: _contactController,
+                                            label: 'PHONE NUMBER',
+                                            icon: Icons.phone_android_rounded,
+                                            keyboardType: TextInputType.phone,
+                                          ),
+                                          const SizedBox(height: 24),
+                                          _buildField(
+                                            controller: _addressController,
+                                            label: 'PERMANENT ADDRESS',
+                                            icon: Icons.home_outlined,
+                                            maxLines: 2,
+                                          ),
+                                          const SizedBox(height: 24),
+                                          _buildField(
+                                            controller: _bloodTypeController,
+                                            label: 'BLOOD TYPE (EMERGENCY ONLY)',
+                                            icon: Icons.bloodtype_outlined,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 40),
+                                  FadeInUp(
+                                    delay: const Duration(milliseconds: 200),
+                                    child: _isSaving
+                                        ? const CircularProgressIndicator(color: AppTheme.primaryColor)
+                                        : SizedBox(
+                                            width: double.infinity,
+                                            height: 60,
+                                            child: ElevatedButton(
+                                              onPressed: _saveProfile,
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: AppTheme.primaryColor,
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                              ),
+                                              child: const Text('UPDATE IDENTITY', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
+                                            ),
+                                          ),
+                                  ),
+                                  const SizedBox(height: 30),
                                 ],
                               ),
                             ),
                           ),
-                          const SizedBox(height: 40),
-                          FadeInUp(
-                            delay: const Duration(milliseconds: 200),
-                            child: _isSaving
-                                ? const CircularProgressIndicator(color: AppTheme.primaryColor)
-                                : SizedBox(
-                                    width: double.infinity,
-                                    height: 60,
-                                    child: ElevatedButton(
-                                      onPressed: _saveProfile,
-                                      child: const Text('UPDATE PROFILE', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
-                                    ),
-                                  ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ),
-        ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppBar() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.1)),
+              ),
+              child: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.white),
+            ),
+          ),
+          Text(
+            'MY PROFILE',
+            style: GoogleFonts.outfit(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 16,
+              letterSpacing: 2.5,
+            ),
+          ),
+          const SizedBox(width: 40), // Placeholder to center text
+        ],
       ),
     );
   }
@@ -251,16 +320,31 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
     String? Function(String?)? validator,
     int maxLines = 1,
   }) {
-    return TextFormField(
-      controller: controller,
-      readOnly: readOnly,
-      keyboardType: keyboardType,
-      validator: validator,
-      maxLines: maxLines,
-      style: TextStyle(color: readOnly ? AppTheme.subtleTextColor : Colors.white),
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: AppTheme.primaryColor),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.01),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: TextFormField(
+        controller: controller,
+        readOnly: readOnly,
+        keyboardType: keyboardType,
+        validator: validator,
+        maxLines: maxLines,
+        style: TextStyle(
+          color: readOnly ? AppTheme.subtleTextColor : Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 15,
+        ),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+          prefixIcon: Icon(icon, color: AppTheme.primaryColor, size: 20),
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.primaryColor.withOpacity(0.5))),
+          contentPadding: const EdgeInsets.all(16),
+        ),
       ),
     );
   }
@@ -274,4 +358,20 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
     _bloodTypeController.dispose();
     super.dispose();
   }
+}
+
+class ProfileGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.white.withOpacity(0.12)..strokeWidth = 0.5;
+    const spacing = 50.0;
+    for (var i = 0.0; i < size.width; i += spacing) {
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
+    }
+    for (var i = 0.0; i < size.height; i += spacing) {
+      canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
+    }
+  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
