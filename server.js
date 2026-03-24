@@ -162,13 +162,15 @@ let activeEmergencyRegistry = {}; // Simple In-Memory DB
 
 // 1. Victim Endpoint: Broadcast Signal to HQ
 app.post('/report-sos', (req, res) => {
-    const { userId, userName, userPhone, userEmail, userAddress, userBlood, userPhoto, emotion, lat, lng, locationLink } = req.body;
+    const { reportId, userId, userName, userPhone, userEmail, userAddress, userBlood, userPhoto, emotion, lat, lng, locationLink } = req.body;
     
-    if (!userId) return res.status(400).json({ error: 'Missing Identity' });
+    const rid = reportId || `R-${Date.now()}`;
+    if (!rid) return res.status(400).json({ error: 'Missing Identity' });
 
-    console.log(`📡 HQ SIGNAL: SOS recieved from ${userName} (${userPhone})`);
+    console.log(`📡 HQ SIGNAL: SOS recieved from ${userName} [Report ID: ${rid}]`);
     
-    activeEmergencyRegistry[userId] = {
+    activeEmergencyRegistry[rid] = {
+        reportId: rid,
         userId,
         userName,
         userPhone,
@@ -196,10 +198,11 @@ app.get('/hq-dashboard', (req, res) => {
 
 // 3. Police Endpoint: Resolve Case
 app.post('/hq-resolve', (req, res) => {
-    const { userId } = req.body;
-    if (activeEmergencyRegistry[userId]) {
-        activeEmergencyRegistry[userId].status = 'resolved';
-        console.log(`✅ HQ RESOLVE: Case for ${userId} closed.`);
+    const { userId, reportId } = req.body;
+    const rid = reportId || userId;
+    if (activeEmergencyRegistry[rid]) {
+        activeEmergencyRegistry[rid].status = 'resolved';
+        console.log(`✅ HQ RESOLVE: Case for ${rid} closed.`);
     }
     res.json({ success: true });
 });

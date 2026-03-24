@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../utils/app_theme.dart';
 import 'login_screen.dart';
 import 'home_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/api_config.dart';
 
 class PoliceDashboardScreen extends StatefulWidget {
@@ -28,13 +29,7 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchEmergencies();
-    _fetchHistory();
-    // Poll HQ server every 5 seconds
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      _fetchEmergencies();
-      if (_showHistory) _fetchHistory();
-    });
+    // Streams handle fetching automatically
   }
 
   @override
@@ -43,39 +38,7 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
     super.dispose();
   }
 
-  Future<void> _fetchEmergencies() async {
-    if (_isFetching) return;
-    try {
-      final response = await http.get(Uri.parse(ApiConfig.hqDashboardUrl));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (mounted) {
-          setState(() {
-            _activeEmergencies = data['emergencies'] ?? [];
-            _isFetching = false;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint("HQ Fetch Error: $e");
-    }
-  }
-
-  Future<void> _fetchHistory() async {
-    try {
-      final response = await http.get(Uri.parse(ApiConfig.hqHistoryUrl));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (mounted) {
-          setState(() {
-            _historyEmergencies = data['history'] ?? [];
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint("History Fetch Error: $e");
-    }
-  }
+  // These are replaced by StreamBuilders for a better reactive UI
 
   Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
@@ -91,14 +54,23 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
     if (!await launchUrl(url)) throw 'Could not launch $url';
   }
 
-  Future<void> _resolveSOS(String userId) async {
-    await http.post(
-      Uri.parse(ApiConfig.hqResolveUrl),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'userId': userId}),
-    );
-    _fetchEmergencies(); // Refresh instantly
-    _fetchHistory(); 
+  Future<void> _resolveSOS(String reportId) async {
+    try {
+      await FirebaseFirestore.instance.collection('sos_reports').doc(reportId).update({
+        'status': 'resolved',
+        'resolvedAt': FieldValue.serverTimestamp(),
+      });
+      
+      // Also notify backend if needed for SMS deactivation/cleanup
+      http.post(
+        Uri.parse(ApiConfig.hqResolveUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'reportId': reportId}), 
+      ).catchError((e) => debugPrint("Backend resolve notify error: $e"));
+
+    } catch (e) {
+      debugPrint("Resolve Error: $e");
+    }
   }
 
   @override
@@ -139,9 +111,24 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
             _buildStatBar(),
             _buildToggle(),
             Expanded(
-              child: _showHistory 
-                ? (_historyEmergencies.isEmpty ? _buildEmptyState() : _buildEmergencyList(_historyEmergencies))
-                : (_activeEmergencies.isEmpty ? _buildEmptyState() : _buildEmergencyList(_activeEmergencies)),
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('sos_reports')
+                    .where('status', isEqualTo: _showHistory ? 'resolved' : 'active')
+                    .orderBy('timestamp', descending: true)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator(color: Colors.blueAccent));
+                  }
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return _buildEmptyState();
+                  }
+
+                  final reports = snapshot.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
+                  return _buildEmergencyList(reports);
+                },
+              ),
             ),
           ],
         ),
@@ -194,18 +181,30 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
   }
 
   Widget _buildStatBar() {
-    return Container(
-      padding: const EdgeInsets.only(left: 20, right: 20, top: 10),
-      child: FadeInDown(
-        duration: const Duration(milliseconds: 500),
-        child: Row(
-          children: [
-            _statItem('ACTIVE SOS', _activeEmergencies.length.toString(), Colors.redAccent),
-            const SizedBox(width: 12),
-            _statItem('RESOLVED', _historyEmergencies.length.toString(), Colors.greenAccent),
-          ],
-        ),
-      ),
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('sos_reports').snapshots(),
+      builder: (context, snapshot) {
+        int active = 0;
+        int resolved = 0;
+        if (snapshot.hasData) {
+          active = snapshot.data!.docs.where((doc) => doc['status'] == 'active').length;
+          resolved = snapshot.data!.docs.where((doc) => doc['status'] == 'resolved').length;
+        }
+
+        return Container(
+          padding: const EdgeInsets.only(left: 20, right: 20, top: 10),
+          child: FadeInDown(
+            duration: const Duration(milliseconds: 500),
+            child: Row(
+              children: [
+                _statItem('ACTIVE SOS', active.toString(), Colors.redAccent),
+                const SizedBox(width: 12),
+                _statItem('RESOLVED', resolved.toString(), Colors.greenAccent),
+              ],
+            ),
+          ),
+        );
+      }
     );
   }
 
@@ -356,7 +355,7 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
                           const SizedBox(width: 12),
                           IconButton(
                             icon: const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 28),
-                            onPressed: () => _resolveSOS(data['userId']),
+                            onPressed: () => _resolveSOS(data['reportId'] ?? data['userId']),
                           ),
                         ],
                       ],

@@ -49,6 +49,7 @@ class HomeScreenState extends State<HomeScreen> {
   bool _sosTriggered = false;
   String? _lastDetectedEmotion = 'Urgent';
   String _detectedEmotionDisplay = '';
+  String? _currentReportId; // Track the current active incident ID
 
   @override
   void initState() {
@@ -149,6 +150,7 @@ class HomeScreenState extends State<HomeScreen> {
         _isListening = false;
         _isActivated = false;
         _sosTriggered = false;
+        _currentReportId = null; // Reset current session
         logger.d("Stopped Listening/Activation");
       });
     } else {
@@ -277,6 +279,7 @@ class HomeScreenState extends State<HomeScreen> {
       _isListening = false;
       _speechToText.stop();
       _detectedEmotionDisplay = 'Analyzing...';
+      _currentReportId = FirebaseFirestore.instance.collection('sos_reports').doc().id; 
     });
 
     // --- INSTANT DISPATCH: Phase 1 (Absolute Minimum Latency) ---
@@ -292,11 +295,12 @@ class HomeScreenState extends State<HomeScreen> {
         _lastDetectedEmotion = detectedEmotion;
         
         // Update user display
-        setState(() { _detectedEmotionDisplay = detectedEmotion; });
-        
-        // --- SECONDARY DISPATCH: Updated Detail Alert (Optional refined notification) ---
-        print("🚀 REFINEMENT: Sending updated situational context: $detectedEmotion");
-        // We only send a second one if recurring updates are far away (3 mins)
+        // Update report with refined emotion
+        if (_currentReportId != null) {
+           FirebaseFirestore.instance.collection('sos_reports').doc(_currentReportId).update({
+             'emotion': detectedEmotion,
+           }).catchError((e) => logger.e("Emotion update failed: $e"));
+        }
       }
     } catch (e) {
       logger.e("Analysis skip: $e");
@@ -452,7 +456,27 @@ class HomeScreenState extends State<HomeScreen> {
         locationLink = 'https://www.google.com/maps/search/?api=1&query=${currentLocation.latitude},${currentLocation.longitude}';
         logger.i("✅ Precise Location Lat: ${currentLocation.latitude}, Lng: ${currentLocation.longitude}");
 
-        // --- GLOBAL POLICE DASHBOARD SYNC (FIREBASE - Keep for history) ---
+        // --- PERSISTENT SECURITY ARCHIVE (Every SOS is a unique record) ---
+        if (_currentReportId != null) {
+          FirebaseFirestore.instance.collection('sos_reports').doc(_currentReportId).set({
+            'reportId': _currentReportId,
+            'userId': user.uid,
+            'userName': userName,
+            'userPhone': userPhone,
+            'userEmail': userEmail,
+            'userAddress': userAddress,
+            'userBlood': userBlood,
+            'userPhoto': userPhoto,
+            'emotion': emotion,
+            'location': locationLink,
+            'lat': currentLocation.latitude,
+            'lng': currentLocation.longitude,
+            'timestamp': FieldValue.serverTimestamp(),
+            'status': 'active',
+          }, SetOptions(merge: true));
+        }
+
+        // --- GLOBAL POLICE DASHBOARD SYNC (Legacy Compatibility) ---
         FirebaseFirestore.instance.collection('active_sos').doc(user.uid).set({
           'userId': user.uid,
           'userName': userName,
@@ -468,6 +492,7 @@ class HomeScreenState extends State<HomeScreen> {
           Uri.parse(ApiConfig.reportSosUrl),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
+            'reportId': _currentReportId,
             'userId': user.uid,
             'userName': userName,
             'userPhone': userPhone,
