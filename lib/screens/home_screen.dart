@@ -446,84 +446,94 @@ class HomeScreenState extends State<HomeScreen> {
     print("✅ ALERT_PHASE: Found ${contactsList.length} contacts. Proceeding to send.");
 
     String locationLink = 'Location Unavailable (Check Connectivity)';
+    double? currentLat;
+    double? currentLng;
+
     try {
       final Location location = Location();
       logger.d("📍 Fetching precise coordinates...");
       final LocationData currentLocation = await location.getLocation().timeout(
-        isRecurring ? const Duration(seconds: 10) : const Duration(milliseconds: 1500)
+        isRecurring ? const Duration(seconds: 15) : const Duration(seconds: 10)
       );
       
       if (currentLocation.latitude != null && currentLocation.longitude != null) {
+        currentLat = currentLocation.latitude;
+        currentLng = currentLocation.longitude;
         locationLink = 'https://www.google.com/maps/search/?api=1&query=${currentLocation.latitude},${currentLocation.longitude}';
         logger.i("✅ Precise Location Lat: ${currentLocation.latitude}, Lng: ${currentLocation.longitude}");
-
-        // --- PERSISTENT SECURITY ARCHIVE (Every SOS is a unique record) ---
-        if (_currentReportId != null) {
-          FirebaseFirestore.instance.collection('sos_reports').doc(_currentReportId).set({
-            'reportId': _currentReportId,
-            'userId': user.uid,
-            'userName': userName,
-            'userPhone': userPhone,
-            'userEmail': userEmail,
-            'userAddress': userAddress,
-            'userBlood': userBlood,
-            'userPhoto': userPhoto,
-            'emotion': emotion,
-            'location': locationLink,
-            'lat': currentLocation.latitude,
-            'lng': currentLocation.longitude,
-            'timestamp': FieldValue.serverTimestamp(),
-            'status': 'active',
-          }, SetOptions(merge: true));
-        }
-
-        // --- GLOBAL POLICE DASHBOARD SYNC (Legacy Compatibility) ---
-        FirebaseFirestore.instance.collection('active_sos').doc(user.uid).set({
-          'userId': user.uid,
-          'userName': userName,
-          'emotion': emotion,
-          'location': locationLink,
-          'lat': currentLocation.latitude,
-          'lng': currentLocation.longitude,
-          'timestamp': FieldValue.serverTimestamp(),
-          'status': 'active',
-        }, SetOptions(merge: true));
-
-        // --- 💎 NEW: COMMAND CENTER SYNC (MONGODB + PRIVATE API) ---
-        // This bypasses Firebase Security Rules and ensures persistent storage
-        try {
-          http.post(
-            Uri.parse(ApiConfig.reportSosUrl),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'reportId': _currentReportId,
-              'userId': user.uid,
-              'userName': userName,
-              'userPhone': userPhone,
-              'userEmail': userEmail,
-              'userAddress': userAddress,
-              'userBlood': userBlood,
-              'userPhoto': userPhoto,
-              'emotion': emotion,
-              'lat': currentLocation.latitude,
-              'lng': currentLocation.longitude,
-              'locationLink': locationLink,
-            }),
-          ).timeout(const Duration(seconds: 5)).catchError((e) {
-             debugPrint("API POST Failed: $e");
-          });
-        } catch (e) {
-          debugPrint("Backend Sync Error: $e");
-        }
       }
     } catch (e) {
       logger.w("⚠️ Precise location fetch timed out or failed: $e. Falling back to last known if possible.");
       try {
-        final lastLoc = await Location().getLocation().timeout(const Duration(seconds: 2)); 
-        locationLink = 'https://www.google.com/maps/search/?api=1&query=${lastLoc.latitude},${lastLoc.longitude}';
+        final lastLoc = await Location().getLocation().timeout(const Duration(seconds: 3)); 
+        if (lastLoc.latitude != null && lastLoc.longitude != null) {
+           currentLat = lastLoc.latitude;
+           currentLng = lastLoc.longitude;
+           locationLink = 'https://www.google.com/maps/search/?api=1&query=${lastLoc.latitude},${lastLoc.longitude}';
+        }
       } catch (_) {
          logger.e("💀 Could not determine location at all.");
       }
+    }
+
+    // --- PERSISTENT SECURITY ARCHIVE (Every SOS is a unique record) ---
+    if (_currentReportId != null) {
+      FirebaseFirestore.instance.collection('sos_reports').doc(_currentReportId).set({
+        'reportId': _currentReportId,
+        'userId': user.uid,
+        'userName': userName,
+        'userPhone': userPhone,
+        'userEmail': userEmail,
+        'userAddress': userAddress,
+        'userBlood': userBlood,
+        'userPhoto': userPhoto,
+        'emotion': emotion,
+        'location': locationLink,
+        'lat': currentLat ?? 0.0,
+        'lng': currentLng ?? 0.0,
+        'timestamp': FieldValue.serverTimestamp(),
+        'status': 'active',
+      }, SetOptions(merge: true));
+    }
+
+    // --- GLOBAL POLICE DASHBOARD SYNC (Legacy Compatibility) ---
+    FirebaseFirestore.instance.collection('active_sos').doc(user.uid).set({
+      'userId': user.uid,
+      'userName': userName,
+      'emotion': emotion,
+      'location': locationLink,
+      'lat': currentLat ?? 0.0,
+      'lng': currentLng ?? 0.0,
+      'timestamp': FieldValue.serverTimestamp(),
+      'status': 'active',
+    }, SetOptions(merge: true));
+
+    // --- 💎 NEW: COMMAND CENTER SYNC (MONGODB + PRIVATE API) ---
+    // This bypasses Firebase Security Rules and ensures persistent storage
+    try {
+      http.post(
+        Uri.parse(ApiConfig.reportSosUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'reportId': _currentReportId,
+          'userId': user.uid,
+          'userName': userName,
+          'userPhone': userPhone,
+          'userEmail': userEmail,
+          'userAddress': userAddress,
+          'userBlood': userBlood,
+          'userPhoto': userPhoto,
+          'emotion': emotion,
+          'lat': currentLat ?? 0.0,
+          'lng': currentLng ?? 0.0,
+          'locationLink': locationLink,
+        }),
+      ).timeout(const Duration(seconds: 5)).catchError((e) {
+          debugPrint("API POST Failed: $e");
+          return http.Response('', 500); // Return a dummy response to satisfy types
+      });
+    } catch (e) {
+      debugPrint("Backend Sync Error: $e");
     }
 
     logger.i("🎯 Attempting to alert ${contactsList.length} contacts: $contactsList");

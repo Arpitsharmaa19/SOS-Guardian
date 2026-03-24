@@ -11,6 +11,9 @@ import 'login_screen.dart';
 import 'home_screen.dart';
 import '../utils/api_config.dart';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:location/location.dart' as loc;
+
 class PoliceDashboardScreen extends StatefulWidget {
   const PoliceDashboardScreen({super.key});
 
@@ -24,11 +27,13 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
   Timer? _refreshTimer;
   bool _isFetching = false;
   bool _showHistory = false;
+  Timer? _policeLocTimer;
 
   @override
   void initState() {
     super.initState();
     _fetchEmergencies();
+    _startPoliceLocationPing();
     _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (_showHistory) {
         _fetchHistory();
@@ -41,7 +46,50 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _policeLocTimer?.cancel();
     super.dispose();
+  }
+
+  void _startPoliceLocationPing() {
+    // Ping immediately then every 3 mins
+    _updatePoliceLocation();
+    _policeLocTimer = Timer.periodic(const Duration(minutes: 3), (_) {
+      _updatePoliceLocation();
+    });
+  }
+
+  Future<void> _updatePoliceLocation() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final locationParams = loc.Location();
+      bool serviceEnabled = await locationParams.serviceEnabled();
+      if (!serviceEnabled) {
+        serviceEnabled = await locationParams.requestService();
+        if (!serviceEnabled) return;
+      }
+
+      loc.PermissionStatus permissionGranted = await locationParams.hasPermission();
+      if (permissionGranted == loc.PermissionStatus.denied) {
+        permissionGranted = await locationParams.requestPermission();
+        if (permissionGranted != loc.PermissionStatus.granted) return;
+      }
+
+      final currentLocation = await locationParams.getLocation().timeout(const Duration(seconds: 5));
+      if (currentLocation.latitude != null && currentLocation.longitude != null) {
+        await FirebaseFirestore.instance.collection('police_locations').doc(user.uid).set({
+          'userId': user.uid,
+          'lat': currentLocation.latitude,
+          'lng': currentLocation.longitude,
+          'timestamp': FieldValue.serverTimestamp(),
+          'updatedAt': DateTime.now().toIso8601String(),
+        }, SetOptions(merge: true));
+        debugPrint("HQ: Police Loc updated.");
+      }
+    } catch (e) {
+      debugPrint("HQ: Police Loc fetch failed. $e");
+    }
   }
 
   Future<void> _fetchEmergencies() async {
