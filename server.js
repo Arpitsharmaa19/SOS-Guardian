@@ -106,8 +106,6 @@ app.post('/make-call', async (req, res) => {
             cleanTo = '+' + cleanTo;
         }
     }
-
-    // Extract the numeric part (remove 'whatsapp:' prefix if accidentally present)
     const fromNumber = voiceNumber.replace('whatsapp:', '');
 
     console.log(`[Request] Initiating Call to: ${cleanTo} from ${fromNumber}`);
@@ -217,15 +215,40 @@ app.post('/report-sos', async (req, res) => {
         io.emit('new-sos', report);
 
         // --- DISPATCH ALERTS (Twilio/WhatsApp/Email) ---
-        // ... only send if NEW (initial trigger) or specifically requested
-        if (!reportId) { // Basic check for new session
-            // Existing logic for alerts could go here...
+        // Basic throttle (Send if new activation, or if specifically requested)
+        if (!reportId || (report && report.status === 'active')) {
+            const victimName = (userName || 'A Citizen').toUpperCase();
+            const alertMsg = `🆘 SOS! EMERGENCY DETECTED!
+Victim: ${victimName}
+Location: ${locationLink || 'Unknown'}
+Status: ${emotion || 'Distress Alert'}`;
+
+            // 1. Alert Emergency Contacts (SMS + WhatsApp)
+            if (userPhone && client) {
+                client.messages.create({ body: alertMsg, to: userPhone, from: voiceNumber })
+                    .catch(e => console.error("Alert SMS fail:", e.message));
+            }
+
+            // 2. Alert Priority (Police Email)
+            if (userEmail) {
+                transporter.sendMail({ from: process.env.EMAIL_USER, to: userEmail, subject: `🚨 SOS GUARDIAN ALERT: ${victimName} 🚨`, text: alertMsg })
+                    .catch(e => console.error("Alert Email fail:", e.message));
+            }
+
+            // 3. Initiate Tactical Call
+            if (userPhone && client) {
+                client.calls.create({
+                    twiml: `<Response><Say voice="Polly.Joanna">Emergency, Emergency. SOS alert from ${victimName}. Please check your command dashboard.</Say></Response>`,
+                    to: userPhone,
+                    from: voiceNumber.replace('whatsapp:', '')
+                }).catch(e => console.error("Alert Call fail:", e.message));
+            }
         }
 
         res.json({ success: true, reportId: rid });
     } catch (err) {
-        console.error("Save Error:", err);
-        res.status(500).json({ error: "Failed to log SOS" });
+        console.error("Save Error:", err.message);
+        res.status(500).json({ error: `Save failed: ${err.message}` });
     }
 });
 
@@ -235,7 +258,7 @@ app.get('/hq-dashboard', async (req, res) => {
         const active = await SOSReport.find({ status: 'active' }).sort({ timestamp: -1 });
         res.json({ success: true, emergencies: active });
     } catch (err) {
-        res.status(500).json({ error: "Failed to fetch dashboard" });
+        res.status(500).json({ error: `Fetch failed: ${err.message}` });
     }
 });
 

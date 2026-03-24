@@ -37,12 +37,12 @@ class _SOSHistoryScreenState extends State<SOSHistoryScreen> {
         if (mounted) {
           setState(() {
             _history = data['history'] ?? [];
-            _isLoading = false;
           });
         }
       }
     } catch (e) {
       debugPrint("History Fetch Error: $e");
+    } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
