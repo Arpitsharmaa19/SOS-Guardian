@@ -1,8 +1,5 @@
-import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
-import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:animate_do/animate_do.dart';
 import '../utils/app_theme.dart';
 
@@ -14,30 +11,9 @@ class SOSHistoryScreen extends StatefulWidget {
 }
 
 class _SOSHistoryScreenState extends State<SOSHistoryScreen> {
-  List<dynamic> _history = [];
-  bool _isLoading = true;
-
   @override
   void initState() {
     super.initState();
-    _loadHistory();
-  }
-
-  Future<void> _loadHistory() async {
-    setState(() => _isLoading = true);
-    final prefs = await SharedPreferences.getInstance();
-    final String? historyString = prefs.getString('sos_history_local');
-    if (historyString != null) {
-      setState(() {
-        _history = jsonDecode(historyString);
-        _isLoading = false;
-      });
-    } else {
-      setState(() {
-        _history = [];
-        _isLoading = false;
-      });
-    }
   }
 
   Future<void> _clearHistory() async {
@@ -45,22 +21,28 @@ class _SOSHistoryScreenState extends State<SOSHistoryScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.cardColor,
-        title: const Text('Clear All History?', style: TextStyle(color: Colors.white)),
-        content: const Text('This will permanently delete all incident logs from this device.', style: TextStyle(color: Colors.white70)),
+        title: const Text('Clear Log Archive?', style: TextStyle(color: Colors.white)),
+        content: const Text('This will hide all incident logs from your view. They remain on the security server for legal evidence.', style: TextStyle(color: Colors.white70)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(context, true), 
-            child: const Text('Clear All', style: TextStyle(color: AppTheme.emergencyColor))
+            child: const Text('Hide All', style: TextStyle(color: AppTheme.emergencyColor))
           ),
         ],
       ),
     );
 
     if (confirm == true) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('sos_history_local');
-      _loadHistory();
+       final user = FirebaseAuth.instance.currentUser;
+       if (user != null) {
+          final batch = FirebaseFirestore.instance.batch();
+          final logs = await FirebaseFirestore.instance.collection('sos_reports').where('userId', isEqualTo: user.uid).get();
+          for (var doc in logs.docs) {
+            batch.update(doc.reference, {'status': 'archived_by_user'});
+          }
+          await batch.commit();
+       }
     }
   }
 
@@ -86,92 +68,118 @@ class _SOSHistoryScreenState extends State<SOSHistoryScreen> {
               children: [
                 _buildAppBar(),
                 Expanded(
-                  child: _isLoading 
-                    ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
-                    : _history.isEmpty 
-                      ? _buildEmptyState()
-                      : ListView.builder(
-                          physics: const BouncingScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                          itemCount: _history.length,
-                          itemBuilder: (context, index) {
-                            final data = _history[index] as Map<String, dynamic>;
-                            final DateTime timestamp = DateTime.parse(data['timestamp']);
-                            final String type = data['type'] ?? 'AUTOMATED';
-                            
-                            String emotionEmoji = '🚨';
-                            if (type.contains('Terror')) emotionEmoji = '😱';
-                            else if (type.contains('Anger')) emotionEmoji = '🛑';
-                            else if (type.contains('Pain')) emotionEmoji = '🤕';
-                            else if (type.contains('Sadness') || type.contains('Despair')) emotionEmoji = '🤫';
-                            else if (type.contains('Distress')) emotionEmoji = '🆘';
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('sos_reports')
+                        .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                        // Note: Only showing non-archived ones
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor));
+                      }
+                      
+                      final allDocs = snapshot.data?.docs ?? [];
+                      final filteredLogs = allDocs
+                          .where((doc) => doc['status'] != 'archived_by_user')
+                          .map((doc) => doc.data() as Map<String, dynamic>)
+                          .toList();
 
-                            return FadeInUp(
-                              duration: Duration(milliseconds: 200 + (index * 50)),
-                              child: Container(
-                                margin: const EdgeInsets.only(bottom: 16),
-                                decoration: AppTheme.glassDecoration,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(20),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: AppTheme.emergencyColor.withOpacity(0.05),
-                                          shape: BoxShape.circle,
-                                          border: Border.all(color: AppTheme.emergencyColor.withOpacity(0.1)),
-                                        ),
-                                        child: Text(emotionEmoji, style: const TextStyle(fontSize: 22)),
+                      if (filteredLogs.isEmpty) return _buildEmptyState();
+
+                      // Sort locally to avoid index requirement
+                      filteredLogs.sort((a, b) {
+                        final tA = a['timestamp'] as Timestamp?;
+                        final tB = b['timestamp'] as Timestamp?;
+                        if (tA == null || tB == null) return 0;
+                        return tB.compareTo(tA);
+                      });
+
+                      return ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        itemCount: filteredLogs.length,
+                        itemBuilder: (context, index) {
+                          final data = filteredLogs[index];
+                          final Timestamp? ts = data['timestamp'] as Timestamp?;
+                          final DateTime timestamp = ts?.toDate() ?? DateTime.now();
+                          final String type = data['emotion'] ?? 'AUTOMATEDDistress';
+                          
+                          String emotionEmoji = '🚨';
+                          if (type.contains('Terror')) emotionEmoji = '😱';
+                          else if (type.contains('Anger')) emotionEmoji = '🛑';
+                          else if (type.contains('Pain')) emotionEmoji = '🤕';
+                          else if (type.contains('Sadness') || type.contains('Hiding')) emotionEmoji = '🤫';
+                          else if (type.contains('Distress')) emotionEmoji = '🆘';
+
+                          return FadeInUp(
+                            duration: Duration(milliseconds: 200 + (index * 50)),
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              decoration: AppTheme.glassDecoration,
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.emergencyColor.withOpacity(0.05),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: AppTheme.emergencyColor.withOpacity(0.1)),
                                       ),
-                                      const SizedBox(width: 20),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                Text(
-                                                  'SOS REPORT',
-                                                  style: GoogleFonts.outfit(
-                                                    color: AppTheme.emergencyColor,
-                                                    fontWeight: FontWeight.w900,
-                                                    fontSize: 14,
-                                                    letterSpacing: 2,
-                                                  ),
+                                      child: Text(emotionEmoji, style: const TextStyle(fontSize: 22)),
+                                    ),
+                                    const SizedBox(width: 20),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                'SOS REPORT',
+                                                style: GoogleFonts.outfit(
+                                                  color: AppTheme.emergencyColor,
+                                                  fontWeight: FontWeight.w900,
+                                                  fontSize: 14,
+                                                  letterSpacing: 2,
                                                 ),
-                                                Text(
-                                                  DateFormat('HH:mm').format(timestamp),
-                                                  style: const TextStyle(
-                                                    color: AppTheme.primaryColor,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 11,
-                                                    letterSpacing: 1,
-                                                  ),
+                                              ),
+                                              Text(
+                                                DateFormat('HH:mm').format(timestamp),
+                                                style: const TextStyle(
+                                                  color: AppTheme.primaryColor,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 11,
+                                                  letterSpacing: 1,
                                                 ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              type.toUpperCase(),
-                                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 0.5),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              DateFormat('dd MMM yyyy').format(timestamp).toUpperCase(),
-                                              style: const TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1),
-                                            ),
-                                          ],
-                                        ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            type.toUpperCase(),
+                                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            DateFormat('dd MMM yyyy').format(timestamp).toUpperCase(),
+                                            style: const TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1),
+                                          ),
+                                        ],
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            );
-                          },
-                        ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ),
               ],
             ),

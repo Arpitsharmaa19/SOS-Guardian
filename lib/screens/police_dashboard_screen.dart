@@ -114,10 +114,11 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('sos_reports')
-                    .where('status', isEqualTo: _showHistory ? 'resolved' : 'active')
-                    .orderBy('timestamp', descending: true)
-                    .snapshots(),
+                    .snapshots(), // No orderBy to avoid mandatory index requirement
                 builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(child: Text("Query Error: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
+                  }
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator(color: Colors.blueAccent));
                   }
@@ -125,8 +126,26 @@ class _PoliceDashboardScreenState extends State<PoliceDashboardScreen> {
                     return _buildEmptyState();
                   }
 
-                  final reports = snapshot.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
-                  return _buildEmergencyList(reports);
+                  // FILTER AND SORT LOCALLY
+                  final allDocs = snapshot.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
+                  
+                  // Filter based on status
+                  final filteredReports = allDocs.where((data) {
+                    final status = data['status'] ?? 'active';
+                    return _showHistory ? (status == 'resolved') : (status == 'active');
+                  }).toList();
+
+                  if (filteredReports.isEmpty) return _buildEmptyState();
+
+                  // Sort by timestamp locally (Latest first)
+                  filteredReports.sort((a, b) {
+                    final tA = a['timestamp'] as Timestamp?;
+                    final tB = b['timestamp'] as Timestamp?;
+                    if (tA == null || tB == null) return 0;
+                    return tB.compareTo(tA);
+                  });
+
+                  return _buildEmergencyList(filteredReports);
                 },
               ),
             ),
