@@ -1,11 +1,18 @@
 const express = require('express');
-require('dotenv').config();
 const bodyParser = require('body-parser');
-const twilio = require('twilio');
 const cors = require('cors');
+const twilio = require('twilio');
 const nodemailer = require('nodemailer');
+const mongoose = require('mongoose');
+const http = require('http');
+const { Server } = require('socket.io');
+require('dotenv').config();
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
+const PORT = process.env.PORT || 10000;
+
 app.use(cors());
 app.use(bodyParser.json());
 
@@ -22,6 +29,8 @@ console.log('TWILIO_ACCOUNT_SID:', process.env.TWILIO_ACCOUNT_SID ? 'EXISTS' : '
 console.log('TWILIO_AUTH_TOKEN:', process.env.TWILIO_AUTH_TOKEN ? 'EXISTS' : 'MISSING');
 console.log('TWILIO_PHONE_NUMBER:', process.env.TWILIO_PHONE_NUMBER);
 console.log('EMAIL_USER:', process.env.EMAIL_USER ? 'EXISTS' : 'MISSING');
+console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'EXISTS' : 'MISSING');
+
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -157,11 +166,36 @@ app.post('/send-sms', async (req, res) => {
     }
 });
 
+// --- DATABASE SETUP (MongoDB Atlas) ---
+const MONGODB_URI = process.env.MONGODB_URI;
+mongoose.connect(MONGODB_URI)
+    .then(() => console.log('✅ MongoDB Connected Ready for SOS signals'))
+    .catch(err => console.error('❌ MongoDB Connection Error:', err));
+
+const ReportSchema = new mongoose.Schema({
+    reportId: { type: String, unique: true, required: true },
+    userId: String,
+    userName: String,
+    userPhone: String,
+    userEmail: String,
+    userAddress: String,
+    userBlood: String,
+    userPhoto: String,
+    emotion: String,
+    lat: Number,
+    lng: Number,
+    locationLink: String,
+    status: { type: String, default: 'active' },
+    timestamp: { type: Date, default: Date.now },
+    resolvedAt: Date
+});
+
+const SOSReport = mongoose.model('SOSReport', ReportSchema);
+
 // --- RULE-FREE EMERGENCY COMMAND CENTER ---
-let activeEmergencyRegistry = {}; // Simple In-Memory DB
 
 // 1. Victim Endpoint: Broadcast Signal to HQ
-app.post('/report-sos', (req, res) => {
+app.post('/report-sos', async (req, res) => {
     const { reportId, userId, userName, userPhone, userEmail, userAddress, userBlood, userPhoto, emotion, lat, lng, locationLink } = req.body;
     
     const rid = reportId || `R-${Date.now()}`;
@@ -169,51 +203,79 @@ app.post('/report-sos', (req, res) => {
 
     console.log(`📡 HQ SIGNAL: SOS recieved from ${userName} [Report ID: ${rid}]`);
     
-    activeEmergencyRegistry[rid] = {
-        reportId: rid,
-        userId,
-        userName,
-        userPhone,
-        userEmail,
-        userAddress,
-        userBlood,
-        userPhoto,
-        emotion,
-        lat: parseFloat(lat),
-        lng: parseFloat(lng),
-        locationLink,
-        timestamp: new Date().toISOString(),
-        status: 'active'
-    };
+    try {
+        const report = await SOSReport.findOneAndUpdate(
+            { reportId: rid },
+            { 
+                reportId: rid, userId, userName, userPhone, userEmail, userAddress, userBlood, userPhoto, emotion, lat, lng, locationLink,
+                status: 'active' 
+            },
+            { upsert: true, new: true }
+        );
 
-    res.status(200).json({ success: true, message: 'HQ Notified' });
+        // Broadcast to Dashboard via Socket.io
+        io.emit('new-sos', report);
+
+        // --- DISPATCH ALERTS (Twilio/WhatsApp/Email) ---
+        // ... only send if NEW (initial trigger) or specifically requested
+        if (!reportId) { // Basic check for new session
+            // Existing logic for alerts could go here...
+        }
+
+        res.json({ success: true, reportId: rid });
+    } catch (err) {
+        console.error("Save Error:", err);
+        res.status(500).json({ error: "Failed to log SOS" });
+    }
 });
 
-// 2. Police Endpoint: Fetch All Active Emergencies
-app.get('/hq-dashboard', (req, res) => {
-    // Return only active cases
-    const activeCases = Object.values(activeEmergencyRegistry).filter(c => c.status === 'active');
-    res.json({ emergencies: activeCases });
+// 2. Police Endpoint: Fetch DashboardData
+app.get('/hq-dashboard', async (req, res) => {
+    try {
+        const active = await SOSReport.find({ status: 'active' }).sort({ timestamp: -1 });
+        res.json({ success: true, emergencies: active });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch dashboard" });
+    }
 });
 
 // 3. Police Endpoint: Resolve Case
-app.post('/hq-resolve', (req, res) => {
-    const { userId, reportId } = req.body;
-    const rid = reportId || userId;
-    if (activeEmergencyRegistry[rid]) {
-        activeEmergencyRegistry[rid].status = 'resolved';
-        console.log(`✅ HQ RESOLVE: Case for ${rid} closed.`);
+app.post('/hq-resolve', async (req, res) => {
+    const { reportId } = req.body;
+    try {
+        await SOSReport.findOneAndUpdate(
+            { reportId: reportId },
+            { status: 'resolved', resolvedAt: new Date() }
+        );
+        console.log(`✅ HQ RESOLVE: Case for ${reportId} closed.`);
+        io.emit('sos-resolved', reportId);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: "Resolve failed" });
     }
-    res.json({ success: true });
 });
 
-// 4. Police Endpoint: Fetch Resolved History
-app.get('/hq-history', (req, res) => {
-    // Return only resolved cases, sorted by latest first
-    const resolvedCases = Object.values(activeEmergencyRegistry)
-        .filter(c => c.status === 'resolved')
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    res.json({ history: resolvedCases });
+// 4. Archive: Fetch Resolved History
+app.get('/hq-history', async (req, res) => {
+    try {
+        const history = await SOSReport.find({ status: 'resolved' }).sort({ resolvedAt: -1 }).limit(100);
+        res.json({ success: true, history: history });
+    } catch (err) {
+        res.status(500).json({ error: "History fetch failed" });
+    }
+});
+
+// 5. Citizen: Personal History
+app.get('/my-history/:userId', async (req, res) => {
+    try {
+        const history = await SOSReport.find({ 
+            userId: req.params.userId,
+            status: { $ne: 'archived_by_user' }
+        }).sort({ timestamp: -1 });
+        res.json({ success: true, history: history });
+    } catch (err) {
+        res.status(500).json({ error: "Personal history failed" });
+    }
 });
 
 app.post('/analyze-emotion', async (req, res) => {
@@ -257,11 +319,14 @@ app.post('/analyze-emotion', async (req, res) => {
         success: true,
         emotion: emotion,
         urgency: urgency,
-        confidence: 0.95
     });
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`SOS Backend listening on port ${PORT}`);
+// --- SERVER START ---
+server.listen(PORT, () => {
+    console.log(`///////////////////////////////////////////////////`);
+    console.log(`SOS GUARDIAN COMMAND CENTER (v2.0 Persistence)`);
+    console.log(`Listening on Port: ${PORT}`);
+    console.log(`Available at: http://localhost:${PORT}`);
+    console.log(`///////////////////////////////////////////////////`);
 });

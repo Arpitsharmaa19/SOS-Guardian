@@ -9,6 +9,7 @@ class ApiConfig {
   // ---------------------------------------------------------
   
   static const String baseUrl = 'https://sos-guardian-api.onrender.com'; 
+  static const String hqBase = baseUrl; // Assuming hqBase is the same as baseUrl or needs to be defined for the new line
 
   static String get statusUrl => '$baseUrl/status';
   static String get reportSosUrl => '$baseUrl/report-sos';
@@ -19,4 +20,5 @@ class ApiConfig {
   static String get hqDashboardUrl => '$baseUrl/hq-dashboard';
   static String get hqResolveUrl => '$baseUrl/hq-resolve';
   static String get hqHistoryUrl => '$baseUrl/hq-history';
+  static String myHistoryUrl(String userId) => '$baseUrl/my-history/$userId';
 }
