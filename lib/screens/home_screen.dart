@@ -1,5 +1,6 @@
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -488,24 +489,32 @@ class HomeScreenState extends State<HomeScreen> {
           'status': 'active',
         }, SetOptions(merge: true));
 
-        http.post(
-          Uri.parse(ApiConfig.reportSosUrl),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'reportId': _currentReportId,
-            'userId': user.uid,
-            'userName': userName,
-            'userPhone': userPhone,
-            'userEmail': userEmail,
-            'userAddress': userAddress,
-            'userBlood': userBlood,
-            'userPhoto': userPhoto,
-            'emotion': emotion,
-            'lat': currentLocation.latitude,
-            'lng': currentLocation.longitude,
-            'locationLink': locationLink,
-          }),
-        ).catchError((e) => print("HQ Signal Error: $e"));
+        // --- 💎 NEW: COMMAND CENTER SYNC (MONGODB + PRIVATE API) ---
+        // This bypasses Firebase Security Rules and ensures persistent storage
+        try {
+          http.post(
+            Uri.parse(ApiConfig.reportSosUrl),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'reportId': _currentReportId,
+              'userId': user.uid,
+              'userName': userName,
+              'userPhone': userPhone,
+              'userEmail': userEmail,
+              'userAddress': userAddress,
+              'userBlood': userBlood,
+              'userPhoto': userPhoto,
+              'emotion': emotion,
+              'lat': currentLocation.latitude,
+              'lng': currentLocation.longitude,
+              'locationLink': locationLink,
+            }),
+          ).timeout(const Duration(seconds: 5)).catchError((e) {
+             debugPrint("API POST Failed: $e");
+          });
+        } catch (e) {
+          debugPrint("Backend Sync Error: $e");
+        }
       }
     } catch (e) {
       logger.w("⚠️ Precise location fetch timed out or failed: $e. Falling back to last known if possible.");
