@@ -21,6 +21,7 @@ class LoginScreenState extends State<LoginScreen> {
   final _auth = FirebaseAuth.instance;
   bool _isLoading = false;
   String _selectedRole = 'citizen'; // Default
+  bool _obscurePassword = true;
 
   void _login() async {
     setState(() => _isLoading = true);
@@ -219,7 +220,7 @@ class LoginScreenState extends State<LoginScreen> {
                             controller: _passwordController,
                             label: 'ACCESS KEY (PASSWORD)',
                             icon: Icons.vpn_key_rounded,
-                            obscureText: true,
+                            isPassword: true,
                           ),
                           
                           if (_selectedRole == 'citizen')
@@ -314,7 +315,7 @@ class LoginScreenState extends State<LoginScreen> {
     required TextEditingController controller,
     required String label,
     required IconData icon,
-    bool obscureText = false,
+    bool isPassword = false,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -324,12 +325,26 @@ class LoginScreenState extends State<LoginScreen> {
       ),
       child: TextField(
         controller: controller,
-        obscureText: obscureText,
+        obscureText: isPassword ? _obscurePassword : false,
         style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
         decoration: InputDecoration(
           labelText: label,
           labelStyle: const TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
           prefixIcon: Icon(icon, color: AppTheme.primaryColor, size: 20),
+          suffixIcon: isPassword 
+              ? IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    color: Colors.white54,
+                    size: 20,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                )
+              : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.all(20),
         ),

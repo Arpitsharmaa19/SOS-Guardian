@@ -24,6 +24,7 @@ class RegistrationScreenState extends State<RegistrationScreen> {
   final _firestore = FirebaseFirestore.instance;
   bool _isLoading = false;
   String _selectedRole = 'citizen'; // Default
+  bool _obscurePassword = true;
 
   void _register() async {
     // --- ROLE-BASED VALIDATION ---
@@ -209,7 +210,7 @@ class RegistrationScreenState extends State<RegistrationScreen> {
                             controller: _passwordController,
                             label: 'ACCESS KEY (PASSWORD)',
                             icon: Icons.vpn_key_rounded,
-                            obscureText: true,
+                            isPassword: true,
                           ),
                           const SizedBox(height: 40),
                           
@@ -289,7 +290,7 @@ class RegistrationScreenState extends State<RegistrationScreen> {
     required TextEditingController controller,
     required String label,
     required IconData icon,
-    bool obscureText = false,
+    bool isPassword = false,
     TextInputType keyboardType = TextInputType.text,
   }) {
     return Container(
@@ -300,13 +301,27 @@ class RegistrationScreenState extends State<RegistrationScreen> {
       ),
       child: TextField(
         controller: controller,
-        obscureText: obscureText,
+        obscureText: isPassword ? _obscurePassword : false,
         keyboardType: keyboardType,
         style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
         decoration: InputDecoration(
           labelText: label,
           labelStyle: const TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
           prefixIcon: Icon(icon, color: AppTheme.primaryColor, size: 20),
+          suffixIcon: isPassword 
+              ? IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    color: Colors.white54,
+                    size: 20,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                )
+              : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.all(20),
         ),
