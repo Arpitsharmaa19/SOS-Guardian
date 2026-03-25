@@ -287,24 +287,47 @@ class HomeScreenState extends State<HomeScreen> {
     _sendSOSMessages(isRecurring: false, emotion: "Urgent (Context Analyzing...)");
     _showSnackBar('🚨 SOS ACTIVATED - ALERTS DISPATCHED!', AppTheme.emergencyColor);
 
-    // --- PHASE 2: Rapid Situation Analysis (1 sec) ---
-    String detectedEmotion = "Urgent SOS";
+    // --- PHASE 2: Rapid Situation Analysis & UI Update ---
     try {
-      final analysis = await WhatsAppService.analyzeEmotion(_text, codeword, _maxSoundLevel);
-      if (analysis != null) {
-        detectedEmotion = analysis['emotion'] ?? detectedEmotion;
-        _lastDetectedEmotion = detectedEmotion;
+      final prefs = await SharedPreferences.getInstance();
+      final localCodeword = prefs.getString('cached_codeword') ?? 'help';
+      
+      final response = await http.post(
+        Uri.parse(ApiConfig.reportSosUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'reportId': _currentReportId,
+          'userId': user.uid,
+          'userName': userName,
+          'userPhone': userPhone,
+          'userEmail': userEmail,
+          'userAddress': userAddress,
+          'userBlood': userBlood,
+          'userPhoto': userPhoto,
+          'message': _text, // SEND RAW SPEECH FOR IMMEDIATE ANALYSIS
+          'codeword': localCodeword,
+          'lat': currentLat ?? 0.0,
+          'lng': currentLng ?? 0.0,
+          'locationLink': locationLink,
+        }),
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        final String detectedEmotion = result['emotion'] ?? 'Panic / Terror';
         
-        // Update user display
-        // Update report with refined emotion
-        if (_currentReportId != null) {
-           FirebaseFirestore.instance.collection('sos_reports').doc(_currentReportId).update({
-             'emotion': detectedEmotion,
-           }).catchError((e) => logger.e("Emotion update failed: $e"));
-        }
+        setState(() {
+          _detectedEmotionDisplay = detectedEmotion;
+          _lastDetectedEmotion = detectedEmotion;
+        });
+        
+        logger.i("✅ INSTANT SITUATION DETECTED: $detectedEmotion");
       }
     } catch (e) {
-      logger.e("Analysis skip: $e");
+      logger.e("Instant analysis skip: $e");
+      setState(() {
+         _detectedEmotionDisplay = 'SOS Active';
+      });
     }
     
     // Continue with analysis in background
