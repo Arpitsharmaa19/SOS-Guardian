@@ -1,107 +1,204 @@
 const express = require('express');
-require('dotenv').config();
 const bodyParser = require('body-parser');
-const twilio = require('twilio');
 const cors = require('cors');
+const twilio = require('twilio');
+const mongoose = require('mongoose');
+const http = require('http');
+const { Server } = require('socket.io');
+require('dotenv').config();
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
+const PORT = process.env.PORT || 10000;
+
 app.use(cors());
 app.use(bodyParser.json());
 
-// Log environment status on startup
-console.log('ENVIRONMENT CHECK:');
-console.log('PORT:', process.env.PORT);
-console.log('TWILIO_ACCOUNT_SID:', process.env.TWILIO_ACCOUNT_SID ? 'EXISTS' : 'MISSING');
-console.log('TWILIO_AUTH_TOKEN:', process.env.TWILIO_AUTH_TOKEN ? 'EXISTS' : 'MISSING');
-console.log('TWILIO_PHONE_NUMBER:', process.env.TWILIO_PHONE_NUMBER);
+// Global Request Logger
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+});
 
+// --- MONGODB CONNECTION (Atlas) ---
+const MONGODB_URI = process.env.MONGODB_URI;
+mongoose.connect(MONGODB_URI)
+    .then(() => console.log('✅ DATABASE: Pure MongoDB Protection Mode active'))
+    .catch(err => console.error('❌ MONGODB ERROR:', err));
+
+// --- SCHEMAS ---
+const UserSchema = new mongoose.Schema({
+    userId: { type: String, unique: true, required: true },
+    name: String,
+    email: { type: String, unique: true, required: true },
+    password: { type: String, required: true }, 
+    phone: String,
+    address: String,
+    bloodType: String,
+    photoUrl: String, // Store as Base64 for simplicity
+    codeword: { type: String, default: 'help me' },
+    contactList: { type: Map, of: String } // Key: Relation/Name, Value: Phone
+});
+const User = mongoose.model('User', UserSchema);
+
+const ReportSchema = new mongoose.Schema({
+    reportId: { type: String, unique: true, required: true },
+    userId: String,
+    userName: String,
+    userPhone: String,
+    userAddress: String,
+    userBlood: String,
+    userPhoto: String,
+    emotion: String, // This will store our detected situation
+    lat: Number,
+    lng: Number,
+    locationLink: String,
+    status: { type: String, default: 'active' },
+    timestamp: { type: Date, default: Date.now },
+    resolvedAt: Date
+});
+const SOSReport = mongoose.model('SOSReport', ReportSchema);
+
+// --- TWILIO INITIALIZATION ---
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
-const twilioNumber = process.env.TWILIO_PHONE_NUMBER;
+const voiceNumber = process.env.TWILIO_PHONE_NUMBER;
+const whatsappNumber = process.env.TWILIO_WHATSAPP_NUMBER || `whatsapp:${voiceNumber}`;
 
 let client;
 if (accountSid && authToken && accountSid.startsWith('AC')) {
     client = twilio(accountSid, authToken);
-    console.log('✅ Twilio Client Initialized');
-} else {
-    console.warn('⚠️ Twilio Credentials missing or invalid in .env!');
 }
 
-app.get('/status', (req, res) => {
-    res.json({
-        status: 'online',
-        twilioReady: !!client,
-        timestamp: new Date().toISOString()
-      });
+// --- CORE AUTH APIS (REPLACING FIREBASE) ---
+
+app.post('/register', async (req, res) => {
+    console.log(`[AUTH] Registration request for: ${req.body.email}`);
+    try {
+        const userId = `U-${Date.now()}`;
+        const newUser = new User({ ...req.body, userId });
+        await newUser.save();
+        res.status(200).json({ success: true, userId: userId, user: newUser });
+    } catch (err) {
+        console.error("Reg Error:", err.message);
+        res.status(500).json({ success: false, error: "Registration failed: " + err.message });
+    }
 });
 
-app.post('/analyze-emotion', async (req, res) => {
-    const { message, codeword } = req.body;
-    const trigger = (codeword || 'help').toLowerCase();
-    
-    // Remove the trigger word from the text to analyze the *context*
-    let msg = (message || '').toLowerCase().replace(trigger, '').trim();
-
-    console.log(`[Situation AI] Analyzing Context: "${msg}"`);
-
-    let emotion = 'General Distress';
-    let urgency = 'High';
-
-    // SITUATIONAL KEYWORD CATEGORIES (Speech-Only)
-    const MEDICAL = ['pain', 'hurt', 'blood', 'doctor', 'ambulance', 'faint', 'heart', 'breathing', 'injury'];
-    const THREAT = ['go away', 'stop', 'dont', 'get off', 'leave', 'fighting', 'weapon', 'gun', 'knife'];
-    const PANIC = ['scared', 'terror', 'emergency', 'help me', 'danger'];
-
-    if (MEDICAL.some(k => msg.includes(k))) {
-        emotion = 'Medical Emergency';
-        urgency = 'Critical';
-    } else if (THREAT.some(k => msg.includes(k))) {
-        emotion = 'Physical Threat / Assault';
-        urgency = 'Extreme';
-    } else if (PANIC.some(k => msg.includes(k))) {
-        emotion = 'Panic & Distress';
-        urgency = 'High';
+app.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+    console.log(`[AUTH] Login attempt: ${email}`);
+    try {
+        const user = await User.findOne({ email, password });
+        if (user) {
+            res.json({ success: true, userId: user.userId, user: user });
+        } else {
+            res.status(401).json({ success: false, error: "Invalid credentials" });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: "Login failed" });
     }
-
-    console.log(`✅ ANALYSIS COMPLETE: Situation -> ${emotion}`);
-    
-    res.status(200).json({
-        success: true,
-        emotion: emotion,
-        urgency: urgency
-    });
 });
 
-app.post('/send-whatsapp', async (req, res) => {
-    const { to, message } = req.body;
+app.post('/update-codeword', async (req, res) => {
+    const { userId, codeword } = req.body;
+    try {
+        await User.findOneAndUpdate({ userId }, { codeword });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
-    let cleanTo = to.trim().replace(/\s+/g, '').replace(/-/g, '');
-    if (!cleanTo.startsWith('+')) {
-        cleanTo = (cleanTo.length === 10) ? '+91' + cleanTo : '+' + cleanTo;
+// --- THE EMERGENCY ENGINE (WORD-BASED SITUATION AI) ---
+
+app.post('/report-sos', async (req, res) => {
+    const { reportId, userId, userName, userPhone, locationLink, message } = req.body;
+    
+    // 🧠 1. Word Analysis (IGNORE "HELP" TRIGGER)
+    const msg = (message || '').toLowerCase();
+    let situation = "General Distress Alert"; // Default Case
+
+    // Priority Detection Logic (Heuristics)
+    if (msg.includes('pain') || msg.includes('hurt') || msg.includes('doctor') || msg.includes('blood') || msg.includes('ambulance')) {
+        situation = "🚨 MEDICAL EMERGENCY (Injury Reported)";
+    } else if (msg.includes('stop') || msg.includes('don\'t') || msg.includes('scared') || msg.includes('get off') || msg.includes('fighting') || msg.includes('weapon')) {
+        situation = "⚠️ PHYSICAL THREAT / AGGRESSION DETECTED";
     }
 
-    const formattedTo = `whatsapp:${cleanTo}`;
-    console.log(`[Request] Sending to: ${formattedTo}`);
-
-    if (!client) {
-        return res.status(500).json({ success: false, error: 'Twilio Client not initialized' });
-    }
+    console.log(`📡 HQ SIGNAL: SOS from ${userName} [Situation: ${situation}]`);
 
     try {
-        const response = await client.messages.create({
-            body: message,
-            from: twilioNumber,
-            to: formattedTo
-        });
-        console.log(`✅ SUCCESS SID: ${response.sid}`);
-        res.status(200).json({ success: true, sid: response.sid });
-    } catch (error) {
-        console.error(`❌ TWILIO ERROR: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        // 💾 2. Save/Update Report in MongoDB with detected emotion
+        const report = await SOSReport.findOneAndUpdate(
+            { reportId: reportId || `R-${Date.now()}` },
+            { ...req.body, emotion: situation, status: 'active' },
+            { upsert: true, new: true }
+        );
+
+        // 📡 3. Broadcast to Police Dashboard via Socket.io
+        io.emit('new-sos', report);
+
+        // 📱 4. WHATSAPP DISPATCH (Twilio)
+        if (userPhone && client) {
+            const alertMsg = `🆘 SOS! EMERGENCY DETECTED!
+Victim: ${userName.toUpperCase()}
+SITUATION: ${situation}
+Live Tracking: ${locationLink || 'Unavailable'}`;
+
+            // Send WhatsApp
+            client.messages.create({
+                body: alertMsg,
+                from: whatsappNumber,
+                to: `whatsapp:${userPhone}`
+            }).catch(e => console.error("WA Dispatch Fail:", e.message));
+
+            // Backup Call
+            client.calls.create({
+                twiml: `<Response><Say voice="Polly.Joanna">Emergency alert! ${userName} is in a state of ${situation}. Check your WhatsApp for the live location.</Say></Response>`,
+                to: userPhone.replace('whatsapp:', ''),
+                from: voiceNumber.replace('whatsapp:', '')
+            }).catch(e => console.error("Call Dispatch Fail:", e.message));
+        }
+
+        res.json({ success: true, reportId: report.reportId, emotion: situation });
+    } catch (err) {
+        console.error("Save Error:", err.message);
+        res.status(500).json({ error: err.message });
     }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`SOS Backend listening on port ${PORT}`);
+// --- POLICE COMMAND CENTER BEYOND THE CLOUD ---
+
+app.get('/hq-dashboard', async (req, res) => {
+    const active = await SOSReport.find({ status: 'active' }).sort({ timestamp: -1 });
+    res.json({ success: true, emergencies: active });
+});
+
+app.post('/hq-resolve', async (req, res) => {
+    const { reportId } = req.body;
+    await SOSReport.findOneAndUpdate({ reportId }, { status: 'resolved', resolvedAt: new Date() });
+    io.emit('sos-resolved', reportId);
+    res.json({ success: true });
+});
+
+app.get('/hq-history', async (req, res) => {
+    const history = await SOSReport.find({ status: 'resolved' }).sort({ resolvedAt: -1 }).limit(50);
+    res.json({ success: true, history });
+});
+
+app.get('/my-history/:userId', async (req, res) => {
+    const history = await SOSReport.find({ userId: req.params.userId }).sort({ timestamp: -1 });
+    res.json({ success: true, history });
+});
+
+app.get('/status', (req, res) => {
+    res.json({ status: 'online', twilio: !!client, mongoose: mongoose.connection.readyState === 1 });
+});
+
+server.listen(PORT, () => {
+    console.log(`///////////////////////////////////////////////////`);
+    console.log(`SOS GUARDIAN: MONGO-PURE BACKEND ACTIVE (Port: ${PORT})`);
+    console.log(`///////////////////////////////////////////////////`);
 });
