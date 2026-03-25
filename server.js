@@ -302,37 +302,30 @@ app.get('/my-history/:userId', async (req, res) => {
 });
 
 app.post('/analyze-emotion', async (req, res) => {
-    console.log(`[Alert Debug] Full Request Body:`, JSON.stringify(req.body));
-    const { message, codeword, soundLevel } = req.body;
-    const msg = (message || '').toLowerCase();
-    const volume = parseFloat(soundLevel) || 0;
+    const { message, codeword } = req.body;
+    const trigger = (codeword || 'help').toLowerCase();
+    
+    // Remove the trigger word from the text to analyze the *context*
+    let msg = (message || '').toLowerCase().replace(trigger, '').trim();
 
-    console.log(`[Situation AI] Analyzing: "${msg}" | volume: ${volume}dB`);
+    console.log(`[Situation AI] Analyzing Context: "${msg}"`);
 
-    let emotion = 'Urgent Alert';
+    let emotion = 'Panic / Terror (High Distress)'; // Default
     let urgency = 'High';
 
-    // SITUATIONAL KEYWORD CATEGORIES
-    const PANIC_KEYWORDS = ['please', 'scared', 'terror', 'running', 'emergency', 'somebody', 'anyone', 'hide'];
-    const ANGER_KEYWORDS = ['stop', 'dont', 'go away', 'get off', 'back off', 'hey', 'leave', 'fighting'];
-    const MEDICAL_KEYWORDS = ['pain', 'hurt', 'heart', 'blood', 'doctor', 'ambulance', 'falling', 'faint', 'chest'];
-    const STEALTH_KEYWORDS = ['shh', 'quiet', 'bathroom', 'closet', 'dark'];
+    // SITUATIONAL KEYWORD CATEGORIES (Speech-Only, Exclude trigger word)
+    const MEDICAL = ['pain', 'hurt', 'blood', 'doctor', 'ambulance', 'faint', 'heart', 'breathing', 'injury', 'medical'];
+    const ANGER = ['stop', 'dont', 'go away', 'get off', 'leave', 'fighting', 'weapon', 'back off', 'hey', 'shut up'];
+    const PANIC = ['scared', 'terror', 'emergency', 'danger', 'hide', 'running', 'anyone', 'somebody'];
 
-    // 1. Priority Text Analysis (What is actually happening?)
-    if (PANIC_KEYWORDS.some(k => msg.includes(k))) {
-        emotion = 'Panic / Terror (High Distress)';
-        urgency = 'Critical';
-    } else if (ANGER_KEYWORDS.some(k => msg.includes(k))) {
+    if (MEDICAL.some(k => msg.includes(k))) {
+        emotion = 'Medical Emergency / Physical Pain';
+        urgency = 'Extreme';
+    } else if (ANGER.some(k => msg.includes(k))) {
         emotion = 'Anger / Conflict (Physical Threat)';
         urgency = 'Extreme';
-    } else if (MEDICAL_KEYWORDS.some(k => msg.includes(k))) {
-        emotion = 'Medical Emergency / Physical Pain';
-        urgency = 'High';
-    } else if (STEALTH_KEYWORDS.some(k => msg.includes(k)) || (volume < 40 && volume > 0)) {
-        emotion = 'Quiet / Stealth SOS (User Hiding)';
-        urgency = 'High (Tactical)';
-    } else if (volume > 75) {
-        emotion = 'Aggressive Distress (High Volume)';
+    } else if (PANIC.some(k => msg.includes(k))) {
+        emotion = 'Panic / Terror (High Distress)';
         urgency = 'High';
     }
 
@@ -341,7 +334,7 @@ app.post('/analyze-emotion', async (req, res) => {
     res.status(200).json({
         success: true,
         emotion: emotion,
-        urgency: urgency,
+        urgency: urgency
     });
 });
 
