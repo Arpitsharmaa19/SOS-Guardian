@@ -283,11 +283,44 @@ class HomeScreenState extends State<HomeScreen> {
       _currentReportId = FirebaseFirestore.instance.collection('sos_reports').doc().id; 
     });
 
-    // --- INSTANT DISPATCH: Phase 1 (Absolute Minimum Latency) ---
+    // --- Phase 1: Rapid Data Fetch & Location Lock ---
+    String userName = 'A Citizen';
+    String userPhone = '';
+    String userEmail = '';
+    String userAddress = '';
+    String userBlood = '';
+    String userPhoto = '';
+    double? currentLat;
+    double? currentLng;
+    String locationLink = 'Unknown';
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (doc.exists) {
+        final d = doc.data()!;
+        userName = d['name'] ?? userName;
+        userPhone = d['phone'] ?? '';
+        userEmail = d['email'] ?? '';
+        userAddress = d['address'] ?? '';
+        userBlood = d['bloodType'] ?? '';
+        userPhoto = d['photoUrl'] ?? '';
+      }
+    }
+
+    try {
+      final locData = await Location().getLocation().timeout(const Duration(seconds: 5));
+      currentLat = locData.latitude;
+      currentLng = locData.longitude;
+      locationLink = 'https://www.google.com/maps/search/?api=1&query=$currentLat,$currentLng';
+    } catch (_) {}
+
+    // --- INSTANT DISPATCH: Phase 2 (Emergency Alerts) ---
     _sendSOSMessages(isRecurring: false, emotion: "Urgent (Context Analyzing...)");
     _showSnackBar('🚨 SOS ACTIVATED - ALERTS DISPATCHED!', AppTheme.emergencyColor);
 
-    // --- PHASE 2: Rapid Situation Analysis & UI Update ---
+    // --- PHASE 3: Rapid Situation Analysis & UI Update ---
+    String finalEmotionLabel = "Urgent SOS";
     try {
       final prefs = await SharedPreferences.getInstance();
       final localCodeword = prefs.getString('cached_codeword') ?? 'help';
@@ -297,14 +330,14 @@ class HomeScreenState extends State<HomeScreen> {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'reportId': _currentReportId,
-          'userId': user.uid,
+          'userId': user?.uid,
           'userName': userName,
           'userPhone': userPhone,
           'userEmail': userEmail,
           'userAddress': userAddress,
           'userBlood': userBlood,
           'userPhoto': userPhoto,
-          'message': _text, // SEND RAW SPEECH FOR IMMEDIATE ANALYSIS
+          'message': _text, 
           'codeword': localCodeword,
           'lat': currentLat ?? 0.0,
           'lng': currentLng ?? 0.0,
@@ -314,14 +347,12 @@ class HomeScreenState extends State<HomeScreen> {
 
       if (response.statusCode == 200) {
         final result = jsonDecode(response.body);
-        final String detectedEmotion = result['emotion'] ?? 'Panic / Terror';
+        finalEmotionLabel = result['emotion'] ?? 'Panic / Terror';
         
         setState(() {
-          _detectedEmotionDisplay = detectedEmotion;
-          _lastDetectedEmotion = detectedEmotion;
+          _detectedEmotionDisplay = finalEmotionLabel;
+          _lastDetectedEmotion = finalEmotionLabel;
         });
-        
-        logger.i("✅ INSTANT SITUATION DETECTED: $detectedEmotion");
       }
     } catch (e) {
       logger.e("Instant analysis skip: $e");
@@ -329,19 +360,14 @@ class HomeScreenState extends State<HomeScreen> {
          _detectedEmotionDisplay = 'SOS Active';
       });
     }
-    
-    // Continue with analysis in background
-    
+
     // --- HUMAN-GRADE NEURAL VOICE SELECTION ---
     try {
       if (kIsWeb) {
         final voices = await _flutterTts.getVoices;
         if (voices != null && voices is List) {
-          // Priority 1: Neural High-Fidelity (sfg)
-          // Priority 2: Standard Google Female
-          // Priority 3: Any Premium US Female
           dynamic bestVoice = voices.firstWhere(
-            (v) => v.toString().contains('en-us-x-sfg'), // The most human sounding one
+            (v) => v.toString().contains('en-us-x-sfg'),
             orElse: () => voices.firstWhere(
               (v) => v.toString().contains('Google') && v.toString().contains('en-US'),
               orElse: () => voices.firstWhere(
@@ -354,17 +380,16 @@ class HomeScreenState extends State<HomeScreen> {
           if (bestVoice != null) {
             Map<String, String> voiceMap = Map<String, String>.from(bestVoice);
             await _flutterTts.setVoice(voiceMap);
-            logger.i("🎯 Elite Neural Voice Activated: ${voiceMap['name']}");
           } else {
              await _flutterTts.setLanguage("en-US");
           }
         }
       }
     } catch (e) {
-      logger.w("Voice selection failed, staying with system standard: $e");
+      logger.w("Voice selection failed: $e");
     }
 
-    _logSOSHistory(type: "$source ($detectedEmotion)");
+    _logSOSHistory(type: "$source ($finalEmotionLabel)");
     _startRecurringUpdates();
   }
 
