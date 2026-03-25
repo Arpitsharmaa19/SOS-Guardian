@@ -1,8 +1,7 @@
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:image_picker/image_picker.dart';
 import '../utils/app_theme.dart';
@@ -35,28 +34,19 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
 
   Future<void> _loadProfileData() async {
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
-      if (doc.exists) {
-        final data = doc.data()!;
-        _nameController.text = data['name'] ?? '';
-        _emailController.text = data['email'] ?? '';
-        _contactController.text = data['phone'] ?? ''; // Fixed to 'phone' as per registration
-        _addressController.text = data['address'] ?? '';
-        _bloodTypeController.text = data['bloodType'] ?? '';
-        _profileImageBase64 = data['photoUrl'] ?? '';
-      }
+      final prefs = await SharedPreferences.getInstance();
+      
+      _nameController.text = prefs.getString('user_name') ?? '';
+      _emailController.text = prefs.getString('user_email') ?? '';
+      _contactController.text = prefs.getString('user_phone') ?? '';
+      _addressController.text = prefs.getString('user_address') ?? '';
+      _bloodTypeController.text = prefs.getString('user_blood') ?? '';
+      _profileImageBase64 = prefs.getString('user_photo') ?? '';
 
       setState(() => _isLoading = false);
     } catch (e) {
       setState(() => _isLoading = false);
-      _showSnackBar('Failed to load profile: $e', AppTheme.emergencyColor);
+      _showSnackBar('Failed to load profile locally', AppTheme.emergencyColor);
     }
   }
 
@@ -65,23 +55,17 @@ class _YourProfileScreenState extends State<YourProfileScreen> {
 
     setState(() => _isSaving = true);
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
+      final prefs = await SharedPreferences.getInstance();
+      
+      await prefs.setString('user_name', _nameController.text.trim());
+      await prefs.setString('user_phone', _contactController.text.trim());
+      await prefs.setString('user_address', _addressController.text.trim());
+      await prefs.setString('user_blood', _bloodTypeController.text.trim().toUpperCase());
+      await prefs.setString('user_photo', _profileImageBase64);
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .update({
-        'name': _nameController.text.trim(),
-        'phone': _contactController.text.trim(),
-        'address': _addressController.text.trim(),
-        'bloodType': _bloodTypeController.text.trim().toUpperCase(),
-        'photoUrl': _profileImageBase64,
-      });
-
-      _showSnackBar('Profile updated successfully', Colors.green);
+      _showSnackBar('Identity updated locally', Colors.green);
     } catch (e) {
-      _showSnackBar('Update failed: $e', AppTheme.emergencyColor);
+      _showSnackBar('Update failed', AppTheme.emergencyColor);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

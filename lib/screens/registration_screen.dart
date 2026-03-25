@@ -1,12 +1,14 @@
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:animate_do/animate_do.dart';
 import 'login_screen.dart';
 import 'home_screen.dart';
 import 'police_dashboard_screen.dart';
 import '../utils/app_theme.dart';
+import '../utils/api_config.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
@@ -20,69 +22,62 @@ class RegistrationScreenState extends State<RegistrationScreen> {
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _auth = FirebaseAuth.instance;
-  final _firestore = FirebaseFirestore.instance;
   bool _isLoading = false;
   String _selectedRole = 'citizen'; // Default
   bool _obscurePassword = true;
 
   void _register() async {
+    final String name = _nameController.text.trim();
+    final String email = _emailController.text.trim();
+    final String password = _passwordController.text.trim();
+    final String phone = _phoneController.text.trim();
+
     // --- ROLE-BASED VALIDATION ---
-    bool isInvalid = _nameController.text.isEmpty || _passwordController.text.isEmpty;
-    if (_selectedRole == 'citizen') {
-      if (_emailController.text.isEmpty) isInvalid = true;
+    if (_selectedRole == 'police') {
+      _showError('Only System Admin can register new HQ accounts.');
+      return;
     }
 
-    if (isInvalid) {
+    if (name.isEmpty || email.isEmpty || password.isEmpty || phone.isEmpty) {
       _showError('All fields are required');
       return;
     }
 
     setState(() => _isLoading = true);
     try {
-      // 1. Create the Auth user FIRST to satisfy "Auth Required" rules
-      final newUser = await _auth.createUserWithEmailAndPassword(
-        email: _selectedRole == 'police' ? 'police_hq@sosguardian.com' : _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+      final response = await http.post(
+        Uri.parse(ApiConfig.registerUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'name': name,
+          'email': email,
+          'password': password,
+          'phone': phone,
+          'role': 'citizen',
+          'bloodType': 'N/A', // Default values
+          'address': 'N/A',
+          'photoUrl': '',
+        }),
       );
 
-      if (newUser.user != null) {
-        // 2. NOW check for the Unique Police Role while logged in
-        if (_selectedRole == 'police') {
-          final existingPolice = await _firestore.collection('users').where('role', isEqualTo: 'police').get();
-          if (existingPolice.docs.isNotEmpty && existingPolice.docs.first.id != newUser.user!.uid) {
-            await newUser.user!.delete(); // Cleanup if duplicate
-            _showError('Error: A Master Police account already exists.');
-            return;
-          }
-        }
-
-        // 3. Save the document
-        await _firestore.collection('users').doc(newUser.user!.uid).set({
-          'uid': newUser.user!.uid,
-          'name': _nameController.text.trim(),
-          'email': newUser.user!.email,
-          'phone': _selectedRole == 'police' ? 'N/A' : _phoneController.text.trim(),
-          'role': _selectedRole,
-          'createdAt': FieldValue.serverTimestamp(),
-          'contactList': {},
-          'codeword': '',
-        });
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final prefs = await SharedPreferences.getInstance();
+        
+        await prefs.setString('mongo_user_id', data['userId']);
+        await prefs.setString('user_name', name);
+        await prefs.setString('user_email', email);
+        await prefs.setString('user_phone', phone);
+        await prefs.setString('user_codeword', 'help me');
 
         if (!mounted) return;
-        
-        // Role-based navigation
-        if (_selectedRole == 'police') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const PoliceDashboardScreen()),
-          );
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
-          );
-        }
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
+      } else {
+        final error = jsonDecode(response.body)['error'] ?? "Registration Failed";
+        throw error;
       }
     } catch (e) {
       _showError(e.toString());

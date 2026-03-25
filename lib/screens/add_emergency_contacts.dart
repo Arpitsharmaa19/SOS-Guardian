@@ -1,7 +1,7 @@
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:animate_do/animate_do.dart';
 import '../utils/app_theme.dart';
 
@@ -16,8 +16,6 @@ class AddEmergencyContactsScreenState extends State<AddEmergencyContactsScreen> 
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
-  final _firestore = FirebaseFirestore.instance;
-  final _auth = FirebaseAuth.instance;
   Map<String, dynamic> _contacts = {};
   bool _isLoading = false;
 
@@ -28,14 +26,12 @@ class AddEmergencyContactsScreenState extends State<AddEmergencyContactsScreen> 
   }
 
   void _loadContacts() async {
-    final user = _auth.currentUser;
-    if (user != null) {
-      final doc = await _firestore.collection('users').doc(user.uid).get();
-      if (doc.exists && doc.data()!.containsKey('contactList')) {
-        setState(() {
-          _contacts = Map<String, dynamic>.from(doc.data()!['contactList']);
-        });
-      }
+    final prefs = await SharedPreferences.getInstance();
+    final String? contactsJson = prefs.getString('cached_contacts_map');
+    if (contactsJson != null) {
+      setState(() {
+        _contacts = Map<String, dynamic>.from(jsonDecode(contactsJson));
+      });
     }
   }
 
@@ -47,33 +43,23 @@ class AddEmergencyContactsScreenState extends State<AddEmergencyContactsScreen> 
 
     setState(() => _isLoading = true);
     try {
-      final user = _auth.currentUser;
-      if (user != null) {
-        // Store as a nested map: { name: { phone: ..., email: ... } }
-        final newContactData = {
-          'phone': _phoneController.text.trim(),
-          'email': _emailController.text.trim(),
-        };
-        
-        // Fetch current list
-        final doc = await _firestore.collection('users').doc(user.uid).get();
-        Map<String, dynamic> currentContacts = {};
-        if (doc.exists && doc.data()!.containsKey('contactList')) {
-          currentContacts = Map<String, dynamic>.from(doc.data()!['contactList']);
-        }
-        
-        currentContacts[_nameController.text.trim()] = newContactData;
+      final prefs = await SharedPreferences.getInstance();
+      
+      final newContactData = {
+        'phone': _phoneController.text.trim(),
+        'email': _emailController.text.trim(),
+      };
+      
+      _contacts[_nameController.text.trim()] = newContactData;
 
-        await _firestore.collection('users').doc(user.uid).set({
-          'contactList': currentContacts,
-        }, SetOptions(merge: true));
+      await prefs.setString('cached_contacts_map', jsonEncode(_contacts));
+      await prefs.setStringList('cached_contacts', _contacts.keys.toList());
 
-        _nameController.clear();
-        _phoneController.clear();
-        _emailController.clear();
-        _showSnackBar('Contact added successfully', Colors.green);
-        _loadContacts();
-      }
+      _nameController.clear();
+      _phoneController.clear();
+      _emailController.clear();
+      _showSnackBar('Contact added locally', Colors.green);
+      _loadContacts();
     } catch (e) {
       _showSnackBar('Error: $e', AppTheme.emergencyColor);
     } finally {
@@ -83,15 +69,12 @@ class AddEmergencyContactsScreenState extends State<AddEmergencyContactsScreen> 
 
   void _deleteContact(String name) async {
     try {
-      final user = _auth.currentUser;
-      if (user != null) {
-        _contacts.remove(name);
-        await _firestore.collection('users').doc(user.uid).update({
-          'contactList': _contacts,
-        });
-        _loadContacts();
-        _showSnackBar('Contact removed', AppTheme.emergencyColor);
-      }
+      final prefs = await SharedPreferences.getInstance();
+      _contacts.remove(name);
+      await prefs.setString('cached_contacts_map', jsonEncode(_contacts));
+      await prefs.setStringList('cached_contacts', _contacts.keys.toList());
+      _loadContacts();
+      _showSnackBar('Contact removed', AppTheme.emergencyColor);
     } catch (e) {
       _showSnackBar('Error: $e', AppTheme.emergencyColor);
     }

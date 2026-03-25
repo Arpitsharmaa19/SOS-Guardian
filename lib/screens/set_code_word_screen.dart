@@ -1,8 +1,10 @@
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:animate_do/animate_do.dart';
+import '../utils/api_config.dart';
 import '../utils/app_theme.dart';
 
 class SetCodeWordScreen extends StatefulWidget {
@@ -14,8 +16,6 @@ class SetCodeWordScreen extends StatefulWidget {
 
 class SetCodeWordScreenState extends State<SetCodeWordScreen> {
   final _codeWordController = TextEditingController();
-  final _firestore = FirebaseFirestore.instance;
-  final _auth = FirebaseAuth.instance;
   bool _isLoading = false;
 
   @override
@@ -25,32 +25,38 @@ class SetCodeWordScreenState extends State<SetCodeWordScreen> {
   }
 
   void _loadCurrentCodeWord() async {
-    final user = _auth.currentUser;
-    if (user != null) {
-      final doc = await _firestore.collection('users').doc(user.uid).get();
-      if (doc.exists) {
-        setState(() {
-          _codeWordController.text = doc.data()?['codeword'] ?? '';
-        });
-      }
-    }
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _codeWordController.text = prefs.getString('user_codeword') ?? 'help me';
+    });
   }
 
   void _saveCodeWord() async {
-    if (_codeWordController.text.isEmpty) {
+    final word = _codeWordController.text.trim().toLowerCase();
+    if (word.isEmpty) {
       _showSnackBar('Please enter a codeword', AppTheme.emergencyColor);
       return;
     }
 
     setState(() => _isLoading = true);
     try {
-      final user = _auth.currentUser;
-      if (user != null) {
-        await _firestore.collection('users').doc(user.uid).update({
-          'codeword': _codeWordController.text.trim(),
-        });
-        _showSnackBar('Codeword updated successfully', Colors.green);
-        Navigator.pop(context);
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('mongo_user_id');
+
+      if (userId != null) {
+        final response = await http.post(
+          Uri.parse(ApiConfig.updateCodewordUrl),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'userId': userId, 'codeword': word}),
+        );
+        
+        if (response.statusCode == 200) {
+          await prefs.setString('user_codeword', word);
+          _showSnackBar('Codeword updated successfully', Colors.green);
+          Navigator.pop(context);
+        } else {
+           throw "Update failed on server";
+        }
       }
     } catch (e) {
       _showSnackBar('Error: $e', AppTheme.emergencyColor);

@@ -3,27 +3,9 @@ import 'package:http/http.dart' as http;
 import '../utils/api_config.dart';
 
 class WhatsAppService {
+  // Email Alert functionality removed per user request
   static Future<void> sendEmailAlert(String email, String message) async {
-    try {
-      print('🚀 SOS_SERVICE: Attempting Email to ${ApiConfig.sendEmailUrl} for $email');
-      final response = await http.post(
-        Uri.parse(ApiConfig.sendEmailUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'to': email,
-          'message': message,
-          'subject': '🚨 EMERGENCY: SOS GUARDIAN ALERT 🚨'
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        print('✅ SUCCESS: Email Alert Sent to $email');
-      } else {
-        print('❌ ERROR: Backend returned ${response.statusCode}: ${response.body}');
-      }
-    } catch (e) {
-      print('❌ CRITICAL: Could not reach Email backend: $e');
-    }
+    print('📧 SOS_SERVICE: Email Alert skipped (Pure MongoDB Architecture)');
   }
 
   static Future<void> makeVoiceCall(String phoneNumber, String message) async {
@@ -71,22 +53,8 @@ class WhatsAppService {
   }
 
   static Future<Map<String, dynamic>?> analyzeEmotion(String message, [String? codeword, double? soundLevel]) async {
-    try {
-      final response = await http.post(
-        Uri.parse(ApiConfig.analyzeEmotionUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'message': message,
-          'codeword': codeword,
-          'soundLevel': soundLevel ?? 40.0,
-        }),
-      );
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      }
-    } catch (e) {
-      print('❌ Emotion analysis error: $e');
-    }
-    return null;
+    // Note: Emotion analysis is now performed server-side during the 'report-sos' cycle.
+    // This method is maintained for backward compatibility in HomeScreen.
+    return {'emotion': 'Urgent Alarm'}; 
   }
 }
