@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:animate_do/animate_do.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../utils/api_config.dart';
 import '../utils/app_theme.dart';
@@ -27,16 +27,11 @@ class _SOSHistoryScreenState extends State<SOSHistoryScreen> {
   }
 
   Future<void> _fetchHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? userId = prefs.getString('mongo_user_id');
-    
-    if (userId == null) {
-      if (mounted) setState(() => _isLoading = false);
-      return;
-    }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
     try {
-      final response = await http.get(Uri.parse(ApiConfig.myHistoryUrl(userId)));
+      final response = await http.get(Uri.parse(ApiConfig.myHistoryUrl(user.uid)));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (mounted) {

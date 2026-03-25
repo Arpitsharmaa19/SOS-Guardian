@@ -1,14 +1,12 @@
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'registration_screen.dart';
 import 'home_screen.dart';
 import 'police_dashboard_screen.dart';
 import '../utils/app_theme.dart';
-import '../utils/api_config.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -20,6 +18,7 @@ class LoginScreen extends StatefulWidget {
 class LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _auth = FirebaseAuth.instance;
   bool _isLoading = false;
   String _selectedRole = 'citizen'; // Default
   bool _obscurePassword = true;
@@ -27,12 +26,9 @@ class LoginScreenState extends State<LoginScreen> {
   void _login() async {
     setState(() => _isLoading = true);
     try {
-      final String email = _emailController.text.trim();
-      final String password = _passwordController.text.trim();
-
       // --- MASTER HQ BYPASS (Rule-Free) ---
       if (_selectedRole == 'police') {
-        if (password == 'police123') {
+        if (_passwordController.text == 'police123') {
            Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const PoliceDashboardScreen()),
@@ -43,44 +39,29 @@ class LoginScreenState extends State<LoginScreen> {
         }
       }
 
-      // Standard Citizen Login (MongoDB API)
-      if (email.isEmpty || password.isEmpty) throw "All fields required";
-
-      final response = await http.post(
-        Uri.parse(ApiConfig.loginUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
+      // Standard Citizen Login (Firebase)
+      final String email = _emailController.text.trim();
+      await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: _passwordController.text.trim(),
       );
+      
+      if (!mounted) return;
+      
+      // Fetch user role
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(_auth.currentUser!.uid).get();
+      final role = userDoc.data()?['role'] ?? 'citizen';
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final prefs = await SharedPreferences.getInstance();
-        
-        // Save relevant info
-        await prefs.setString('mongo_user_id', data['userId']);
-        await prefs.setString('user_name', data['user']['name']);
-        await prefs.setString('user_email', data['user']['email']);
-        await prefs.setString('user_phone', data['user']['phone'] ?? '');
-        await prefs.setString('user_blood', data['user']['bloodType'] ?? '');
-        await prefs.setString('user_photo', data['user']['photoUrl'] ?? '');
-        await prefs.setString('user_address', data['user']['address'] ?? '');
-        await prefs.setString('user_codeword', data['user']['codeword'] ?? 'help me');
-        
-        // Handle contact list sync
-        if (data['user']['contactList'] != null) {
-          Map<String, dynamic> contacts = Map<String, dynamic>.from(data['user']['contactList']);
-          await prefs.setString('cached_contacts_map', jsonEncode(contacts));
-          await prefs.setStringList('cached_contacts', contacts.keys.toList());
-        }
-
-        if (!mounted) return;
+      if (role == 'police') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const PoliceDashboardScreen()),
+        );
+      } else {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const HomeScreen()),
         );
-      } else {
-        final error = jsonDecode(response.body)['error'] ?? "Login Failed";
-        throw error;
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -95,10 +76,27 @@ class LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _forgotPassword() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Please contact support at support@sosguardian.com")),
-    );
+  void _forgotPassword() async {
+    if (_emailController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter your email first")),
+      );
+      return;
+    }
+    try {
+      await _auth.sendPasswordResetEmail(email: _emailController.text.trim());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Password reset email sent!")),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e")),
+        );
+      }
+    }
   }
 
   @override
