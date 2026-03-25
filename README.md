@@ -1,74 +1,47 @@
-# 🔊 Voice-Activated SOS App (VoiceAid)
+# 🛡️ SOS Guardian: Elite Safety & Voice Monitoring
 
-A Flutter-based personal safety app that empowers users to call for help using just their voice.
+A high-performance, premium Flutter-based personal safety ecosystem that empowers users to trigger emergency protocols using just their voice.
 
 ## 🚨 Overview
 
-The **Voice-Activated SOS App** is designed to provide quick and discreet emergency assistance. With a user-defined codeword, the app instantly sends an SOS message to designated emergency contacts—no need to touch your device.
+**SOS Guardian** is a state-of-the-art security platform designed to provide instant, discreet, and context-aware emergency assistance. By leveraging advanced speech processing and a centralized command center, it ensures help is dispatched precisely when and where it is needed—without ever touching your device.
 
-## ✨ Features
+## ✨ Premium Features
 
-- 🔐 **Voice Triggered SOS**: Speak a predefined codeword to activate emergency alerts.
-- 💬 **Speech-to-Text Integration**: Utilizes a Speech-to-Text API for accurate and reliable voice recognition.
-- 📩 **Instant SMS Alerts**: Sends real-time SOS messages via the `telephony` package to saved contacts.
-- ☁️ **Firebase Backend**:
-  - Firestore for secure user data and contact storage.
-  - Cloud Functions for real-time backend processing.
-- 📱 **User-Friendly UI**: Clean Flutter-based interface with seamless setup of contacts and codeword.
+- 🔐 **Intelligent Voice Trigger (Stealth SOS)**: Speak your encrypted codeword to instantly activate high-priority emergency protocols.
+- 🧠 **Contextual Emotion Analysis**: Utilizing server-side processing to analyze situational distress levels and refine alert priority.
+- 📍 **Elite Real-Time Tracking**: Automatic GPS lock with recurring updates every 3 minutes until safety is confirmed.
+- 👮 **Police Command Center Sync**: Instant integration with a centralized HQ dashboard for live dispatch and incident logging.
+- 📱 **Premium Dark Interface**: A glassmorphic, high-contrast UI designed for optimal visibility in high-stress situations.
+- 📞 **Multi-Channel Dispatch**: Automated emergency voice calls and SMS alerts sent simultaneously to verified contacts.
+- 📜 **Local Incident Archive**: Encrypted history of all SOS events stored securely on the device for after-action review.
 
-## 🛠️ Tech Stack
+## 🛠️ Advanced Tech Stack
 
-- **Flutter & Dart**: Frontend development
-- **Firebase Firestore**: Real-time NoSQL database for storing user info
-- **Firebase Cloud Functions**: Backend logic and automation
-- **Speech-to-Text API**: Voice recognition engine
-- **Telephony Package**: Native SMS sending on Android
+- **Flutter (Dart)**: High-performance cross-platform frontend.
+- **Firebase Ecosystem**: 
+  - **Firestore**: Real-time user & contact synchronization.
+  - **Auth**: Secure biometric-ready authentication.
+- **Node.js (Express)**: Specialized backend for Twilio, Nodemailer, and Emotion Analysis integrations.
+- **Speech-To-Text AI**: Low-latency voice processing engine.
+- **Twilio API**: Enterprise-grade SMS and Voice Call dispatch system.
 
-## 🔒 Privacy & Security
+## 🔒 Security & Privacy
 
-User data is securely stored in Firestore. Codewords are locally processed to preserve user privacy. No voice data is transmitted or stored externally.
+We prioritize user privacy. Voice triggers are processed with high efficiency, and situational data is only transmitted during active SOS events. All communication with the Command Center is encrypted.
 
-## 📷 Screenshots
+## 🚀 Deployment Status
 
-<img width="300" height="600" alt="image" src="https://github.com/user-attachments/assets/9c01f6bc-d6a9-4f51-9896-ec3ea39cfac4" />
+- **Backend**: Hosted on Render (`https://sos-guardian-api.onrender.com`)
+- **App**: Standard Release APK optimized for Android 11+
 
-<img width="300" height="600" alt="image" src="https://github.com/user-attachments/assets/c9f88d36-4818-4238-b145-f8f9fc50555a" />
+## 📌 Future Horizon
 
-<img width="300" height="600" alt="image" src="https://github.com/user-attachments/assets/5fc60120-f4e5-426e-a09e-7acd897d6bcc" />
-
-<img width="300" height="600" alt="image" src="https://github.com/user-attachments/assets/35391b71-b03b-4f3d-b65d-a572eb2bd50e" />
-
-<img width="300" height="600" alt="image" src="https://github.com/user-attachments/assets/ff8b40d0-17fb-4f1e-b06e-a151f02414f5" />
-
-<img width="300" height="600" alt="image" src="https://github.com/user-attachments/assets/cd42bd97-bb36-4c8c-ab14-09988eb29a66" />
-
-<img width="300" height="600" alt="image" src="https://github.com/user-attachments/assets/ffcfe53f-0c79-41ac-8755-df10a6741d56" />
-
-<img width="300" height="600" alt="image" src="https://github.com/user-attachments/assets/b56ccb53-e26d-4c71-8013-e7f570dc5865" />
-
-## 🚀 Getting Started
-
-1. Clone this repository.
-2. Run `flutter pub get` to install dependencies.
-3. Set up your Firebase project and add `google-services.json`.
-4. Enable necessary permissions for microphone and SMS.
-5. Run on a physical Android device.
-
-## 📌 Future Enhancements
-
-- Location tracking in SOS messages
-- Multi-language voice recognition
-- Emergency call integration
-- Wearable device compatibility
-
-## 🤝 Contributing
-
-Pull requests are welcome! For major changes, please open an issue first to discuss your ideas.
-
-## 📄 License
-
-This project is open-source under the MIT License.
+- ⌚ **Wearable Companion**: One-tap SOS from smartwatches.
+- 🛡️ **Community Guard**: Neighborhood-level safety alerts.
+- 📹 **Stealth Recording**: Automatic audio/video capture during activation.
 
 ---
 
-**Stay safe. Stay empowered.**
+**Stay safe. Stay empowered. SOS Guardian.**
+

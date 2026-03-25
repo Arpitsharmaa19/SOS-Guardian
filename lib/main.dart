@@ -7,9 +7,17 @@ import 'utils/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  
+  print("🚀 Initializing SOS Guardian...");
+  
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    print("✅ Firebase Ready.");
+  } catch (e) {
+    print("❌ Firebase Init Failed: $e");
+  }
 
   runApp(const MyApp());
 }
