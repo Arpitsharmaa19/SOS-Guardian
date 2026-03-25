@@ -39,6 +39,8 @@ class HomeScreenState extends State<HomeScreen> {
   bool _servicesReady = false; 
 
   Timer? _locationUpdateTimer;
+  Timer? _countdownTimer;
+  int _secondsRemaining = 180; // 3 minutes
   bool _sosTriggered = false;
   String? _lastDetectedEmotion = 'Urgent Alert';
   String _detectedEmotionDisplay = '';
@@ -60,6 +62,7 @@ class HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _locationUpdateTimer?.cancel();
+    _countdownTimer?.cancel();
     _speechToText.stop();
     super.dispose();
   }
@@ -102,6 +105,7 @@ class HomeScreenState extends State<HomeScreen> {
       });
       _speechToText.stop();
       _locationUpdateTimer?.cancel();
+      _countdownTimer?.cancel();
       _showSnackBar('Security OFF', Colors.orange);
     }
   }
@@ -141,11 +145,13 @@ class HomeScreenState extends State<HomeScreen> {
       _speechToText.stop();
       _detectedEmotionDisplay = 'Analyzing...';
       _currentReportId = 'R-${DateTime.now().millisecondsSinceEpoch}';
+      _secondsRemaining = 180;
     });
 
     _sendSOSMessages(message: _text);
     _showSnackBar('🚨 SOS ACTIVATED!', AppTheme.emergencyColor);
     _startRecurringUpdates();
+    _startCountdown();
   }
 
   Future<void> _sendSOSMessages({bool isRecurring = false, String? message}) async {
@@ -192,11 +198,32 @@ class HomeScreenState extends State<HomeScreen> {
     } catch (e) { logger.e("Report Error: $e"); }
   }
 
+  void _startCountdown() {
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_isActivated) {
+        setState(() {
+          if (_secondsRemaining > 0) {
+            _secondsRemaining--;
+          } else {
+            _secondsRemaining = 180; // Reset after hit
+          }
+        });
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
   void _startRecurringUpdates() {
     _locationUpdateTimer?.cancel();
     _locationUpdateTimer = Timer.periodic(const Duration(minutes: 3), (timer) {
-      if (_isActivated) _sendSOSMessages(isRecurring: true);
-      else timer.cancel();
+      if (_isActivated) {
+        _sendSOSMessages(isRecurring: true);
+        setState(() => _secondsRemaining = 180);
+      } else {
+        timer.cancel();
+      }
     });
   }
 
@@ -232,45 +259,97 @@ class HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildAppBar(),
                 Expanded(
-                  child: Center(
+                  child: SingleChildScrollView(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
+                        const SizedBox(height: 20),
                         _buildStatusIndicator(),
                         const SizedBox(height: 50),
                         ZoomIn(
                           child: GestureDetector(
                             onLongPress: () => _triggerAlarmProcedure('Manual Press'),
                             child: Container(
-                              width: 200, height: 200,
+                              width: 220, height: 220,
                               decoration: BoxDecoration(
                                 color: _isActivated ? Colors.red : AppTheme.primaryColor.withOpacity(0.1),
                                 shape: BoxShape.circle,
                                 border: Border.all(color: _isActivated ? Colors.white : AppTheme.primaryColor, width: 4),
-                                boxShadow: [BoxShadow(color: _isActivated ? Colors.red : AppTheme.primaryColor, blurRadius: 30, spreadRadius: 5)]
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: _isActivated ? Colors.red.withOpacity(0.5) : AppTheme.primaryColor.withOpacity(0.3), 
+                                    blurRadius: 30, 
+                                    spreadRadius: 5
+                                  )
+                                ]
                               ),
                               child: Center(
-                                child: Text(_isActivated ? 'SOS ACTIVE' : 'HOLD FOR SOS', 
+                                child: Text(_isActivated ? 'SOS ACTIVE\nDISPATCHING...' : 'HOLD FOR\nEMERGENCY', 
                                   textAlign: TextAlign.center,
-                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 1)),
                               ),
                             ),
                           ),
                         ),
                         const SizedBox(height: 50),
-                        if (_isActivated) FadeInUp(
-                          child: Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: AppTheme.glassDecoration,
-                            child: Column(
-                              children: [
-                                Text('SITUATION DETECTED', style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 5),
-                                Text(_detectedEmotionDisplay, style: TextStyle(color: Colors.redAccent, fontSize: 20, fontWeight: FontWeight.w900)),
-                              ],
+                        if (_isActivated) ...[
+                          FadeInUp(
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 24),
+                              padding: const EdgeInsets.all(24),
+                              decoration: AppTheme.glassDecoration,
+                              child: Column(
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('SITUATION AI', style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                                          const SizedBox(height: 4),
+                                          Text(_detectedEmotionDisplay, style: TextStyle(color: Colors.redAccent, fontSize: 18, fontWeight: FontWeight.w900)),
+                                        ],
+                                      ),
+                                      const Icon(Icons.analytics_outlined, color: Colors.redAccent, size: 30),
+                                    ],
+                                  ),
+                                  const Divider(color: Colors.white10, height: 32),
+                                  Text('SPEECH TRANSCRIPT', style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    _text.isEmpty ? "... listening for emergency context ..." : _text.toUpperCase(),
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic),
+                                  ),
+                                  const Divider(color: Colors.white10, height: 32),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.location_on, color: AppTheme.primaryColor, size: 16),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'NEXT UPDATE IN ${_secondsRemaining}S',
+                                        style: TextStyle(color: AppTheme.primaryColor, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
+                        ] else ...[
+                          FadeInUp(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 40),
+                              child: Text(
+                                'VOICE DISPATCH IS ACTIVE. SAY YOUR CODEWORD TO TRIGGER SOS.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -311,9 +390,16 @@ class HomeScreenState extends State<HomeScreen> {
   Widget _statusDot(String label, bool active, Color color) {
     return Row(
       children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: active ? color : Colors.white24, shape: BoxShape.circle)),
+        Container(
+          width: 8, height: 8, 
+          decoration: BoxDecoration(
+            color: active ? color : Colors.white10, 
+            shape: BoxShape.circle,
+            boxShadow: active ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 5)] : []
+          )
+        ),
         const SizedBox(width: 8),
-        Text(label, style: TextStyle(color: active ? Colors.white : Colors.white24, fontSize: 10, fontWeight: FontWeight.bold)),
+        Text(label, style: TextStyle(color: active ? Colors.white : Colors.white10, fontSize: 10, fontWeight: FontWeight.bold)),
       ],
     );
   }
