@@ -192,20 +192,51 @@ const SOSReport = mongoose.model('SOSReport', ReportSchema);
 
 // --- RULE-FREE EMERGENCY COMMAND CENTER ---
 
+// SITUATIONAL ANALYSIS HELPER (Internal to ensure instant dispatch)
+const performAnalysis = (message, codeword) => {
+    const trigger = (codeword || 'help').toLowerCase();
+    let msg = (message || '').toLowerCase().replace(trigger, '').trim();
+    
+    let emotion = 'Panic / Terror (High Distress)'; // Default
+    let urgency = 'High';
+
+    const MEDICAL = ['pain', 'hurt', 'blood', 'doctor', 'ambulance', 'faint', 'heart', 'breathing', 'injury', 'medical'];
+    const ANGER = ['stop', 'dont', 'go away', 'get off', 'leave', 'fighting', 'weapon', 'back off', 'hey', 'shut up'];
+    const PANIC = ['scared', 'terror', 'emergency', 'danger', 'hide', 'running', 'anyone', 'somebody'];
+
+    if (MEDICAL.some(k => msg.includes(k))) {
+        emotion = 'Medical Emergency / Physical Pain';
+        urgency = 'Extreme';
+    } else if (ANGER.some(k => msg.includes(k))) {
+        emotion = 'Anger / Conflict (Physical Threat)';
+        urgency = 'Extreme';
+    } else if (PANIC.some(k => msg.includes(k))) {
+        emotion = 'Panic / Terror (High Distress)';
+        urgency = 'High';
+    }
+    return { emotion, urgency };
+};
+
 // 1. Victim Endpoint: Broadcast Signal to HQ
 app.post('/report-sos', async (req, res) => {
-    const { reportId, userId, userName, userPhone, userEmail, userAddress, userBlood, userPhoto, emotion, lat, lng, locationLink } = req.body;
+    const { reportId, userId, userName, userPhone, userEmail, userAddress, userBlood, userPhoto, message, codeword, lat, lng, locationLink } = req.body;
     
     const rid = reportId || `R-${Date.now()}`;
     if (!rid) return res.status(400).json({ error: 'Missing Identity' });
 
     console.log(`📡 HQ SIGNAL: SOS recieved from ${userName} [Report ID: ${rid}]`);
     
+    // PERFORM IMMEDIATE ANALYSIS UPON REIEPT
+    const analysis = performAnalysis(message, codeword);
+    const finalEmotion = analysis.emotion;
+
     try {
         const report = await SOSReport.findOneAndUpdate(
             { reportId: rid },
             { 
-                reportId: rid, userId, userName, userPhone, userEmail, userAddress, userBlood, userPhoto, emotion, lat, lng, locationLink,
+                reportId: rid, userId, userName, userPhone, userEmail, userAddress, userBlood, userPhoto, 
+                emotion: finalEmotion, // INSTANT EMOTION FOR HISTORY
+                lat, lng, locationLink,
                 status: 'active' 
             },
             { upsert: true, new: true }
@@ -215,37 +246,40 @@ app.post('/report-sos', async (req, res) => {
         io.emit('new-sos', report);
 
         // --- DISPATCH ALERTS (Twilio/WhatsApp/Email) ---
-        // Basic throttle (Send if new activation, or if specifically requested)
-        if (!reportId || (report && report.status === 'active')) {
-            const victimName = (userName || 'A Citizen').toUpperCase();
-            const alertMsg = `🆘 SOS! EMERGENCY DETECTED!
+        const victimName = (userName || 'A Citizen').toUpperCase();
+        const alertMsg = `🆘 SOS! EMERGENCY DETECTED!
 Victim: ${victimName}
 Location: ${locationLink || 'Unknown'}
-Status: ${emotion || 'Distress Alert'}`;
+Situation: ${finalEmotion}
+Context: ${message || 'Voice Triggered'}`;
 
-            // 1. Alert Emergency Contacts (SMS + WhatsApp)
-            if (userPhone && client) {
-                client.messages.create({ body: alertMsg, to: userPhone, from: voiceNumber })
-                    .catch(e => console.error("Alert SMS fail:", e.message));
-            }
+        // 1. Alert Emergency Contacts (SMS + WhatsApp)
+        if (userPhone && client) {
+            // SMS backup
+            client.messages.create({ body: alertMsg, to: userPhone, from: voiceNumber })
+                .catch(e => console.error("Alert SMS fail:", e.message));
 
-            // 2. Alert Priority (Police Email)
-            if (userEmail) {
-                transporter.sendMail({ from: process.env.EMAIL_USER, to: userEmail, subject: `🚨 SOS GUARDIAN ALERT: ${victimName} 🚨`, text: alertMsg })
-                    .catch(e => console.error("Alert Email fail:", e.message));
-            }
-
-            // 3. Initiate Tactical Call
-            if (userPhone && client) {
-                client.calls.create({
-                    twiml: `<Response><Say voice="Polly.Joanna">Emergency, Emergency. SOS alert from ${victimName}. Please check your command dashboard.</Say></Response>`,
-                    to: userPhone,
-                    from: voiceNumber.replace('whatsapp:', '')
-                }).catch(e => console.error("Alert Call fail:", e.message));
-            }
+            // WhatsApp Priority
+            client.messages.create({ body: alertMsg, from: whatsappNumber, to: `whatsapp:${userPhone}` })
+                .catch(e => console.error("Alert WhatsApp fail:", e.message));
         }
 
-        res.json({ success: true, reportId: rid });
+        // 2. Alert Priority (Police/Guardian Email)
+        if (userEmail) {
+            transporter.sendMail({ from: process.env.EMAIL_USER, to: userEmail, subject: `🚨 SOS EMERGENCY: ${finalEmotion} 🚨`, text: alertMsg })
+                .catch(e => console.error("Alert Email fail:", e.message));
+        }
+
+        // 3. Initiate Tactical Call with Immediate Context
+        if (userPhone && client) {
+            client.calls.create({
+                twiml: `<Response><Say voice="Polly.Joanna">Emergency, Emergency. SOS alert from ${victimName}. Situation is categorized as ${finalEmotion}. Please check your phone for live location.</Say></Response>`,
+                to: userPhone,
+                from: voiceNumber.replace('whatsapp:', '')
+            }).catch(e => console.error("Alert Call fail:", e.message));
+        }
+
+        res.json({ success: true, reportId: rid, emotion: finalEmotion });
     } catch (err) {
         console.error("Save Error:", err.message);
         res.status(500).json({ error: `Save failed: ${err.message}` });

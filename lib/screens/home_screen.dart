@@ -511,6 +511,9 @@ class HomeScreenState extends State<HomeScreen> {
     // --- 💎 NEW: COMMAND CENTER SYNC (MONGODB + PRIVATE API) ---
     // This bypasses Firebase Security Rules and ensures persistent storage
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final localCodeword = prefs.getString('cached_codeword') ?? 'help';
+      
       http.post(
         Uri.parse(ApiConfig.reportSosUrl),
         headers: {'Content-Type': 'application/json'},
@@ -523,14 +526,15 @@ class HomeScreenState extends State<HomeScreen> {
           'userAddress': userAddress,
           'userBlood': userBlood,
           'userPhoto': userPhoto,
-          'emotion': emotion,
+          'message': _text, // SEND RAW SPEECH FOR IMMEDIATE ANALYSIS
+          'codeword': localCodeword,
           'lat': currentLat ?? 0.0,
           'lng': currentLng ?? 0.0,
           'locationLink': locationLink,
         }),
       ).timeout(const Duration(seconds: 5)).catchError((e) {
           debugPrint("API POST Failed: $e");
-          return http.Response('', 500); // Return a dummy response to satisfy types
+          return http.Response('', 500);
       });
     } catch (e) {
       debugPrint("Backend Sync Error: $e");
