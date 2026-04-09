@@ -1,4 +1,5 @@
 import 'package:google_fonts/google_fonts.dart';
+import 'package:battery_plus/battery_plus.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -22,6 +23,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../utils/api_config.dart';
+import '../services/energy_service.dart';
 
 final logger = Logger();
 
@@ -51,16 +53,82 @@ class HomeScreenState extends State<HomeScreen> {
   String? _lastDetectedEmotion = 'Urgent';
   String _detectedEmotionDisplay = '';
   String? _currentReportId; // Track the current active incident ID
+  
+  // Energy & Optimization State
+  final EnergyTracker _energyTracker = EnergyTracker();
+  bool _isOptimizedMode = false;
+  Map<String, double> _energyMetrics = {};
+  Timer? _energyUpdateTimer;
+
+  // Final Breath Battery Tracking
+  final Battery _battery = Battery();
+  bool _sentFinalBreathAlert = false;
 
   @override
   void initState() {
     super.initState();
-    // Services now start only on user interaction for better Web compatibility
+    _refreshEnergyMetrics();
+    // Refresh energy metrics every 10 seconds for the UI
+    _energyUpdateTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+       _refreshEnergyMetrics();
+    });
+    
+    // Start "Final Breath" Battery Monitoring
+    _initBatteryMonitoring();
+  }
+
+  void _initBatteryMonitoring() {
+    _battery.onBatteryStateChanged.listen((BatteryState state) async {
+       if (_sentFinalBreathAlert) return;
+       
+       final level = await _battery.batteryLevel;
+       print("🔋 BATTERY_MONITOR: Level is $level%");
+       
+       if (level <= 5 && _servicesReady) {
+         _triggerFinalBreathAlert();
+       }
+    });
+  }
+
+  Future<void> _triggerFinalBreathAlert() async {
+    if (_sentFinalBreathAlert) return;
+    _sentFinalBreathAlert = true;
+    
+    logger.w("🚨 FINAL BREATH: Battery at 5%. Sending emergency dispatch...");
+    
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Get Current Device Name/User Name
+    final prefs = await SharedPreferences.getInstance();
+    final String name = prefs.getString('cached_user_name') ?? 'The user';
+
+    // 1. Fetch current location for the final report
+    String locationLink = 'Unknown';
+    try {
+      final locData = await Location().getLocation().timeout(const Duration(seconds: 10));
+      locationLink = 'https://www.google.com/maps/search/?api=1&query=${locData.latitude},${locData.longitude}';
+    } catch (_) {}
+
+    final String message = "🚨 FINAL BREATH ALERT: $name's phone battery is critically low (5%). Their last known location is: $locationLink. The system is entering hibernation to preserve power.";
+    
+    // 2. Dispatch to all contacts via WhatsAppService (SMS/Call API)
+    _sendSOSMessages(isRecurring: false, emotion: "CRITICAL: Low Battery Shutdown");
+    
+    _showSnackBar('Final Breath Alert Dispatched to Contacts', AppTheme.emergencyColor);
+  }
+
+  Future<void> _refreshEnergyMetrics() async {
+    final metrics = await _energyTracker.get24HourMetrics();
+    if (mounted) {
+      setState(() => _energyMetrics = metrics);
+    }
   }
 
   @override
   void dispose() {
     _locationUpdateTimer?.cancel();
+    _energyUpdateTimer?.cancel();
     _speechToText.stop();
     super.dispose();
   }
@@ -98,6 +166,9 @@ class HomeScreenState extends State<HomeScreen> {
           _isListening = true;
           _text = '';
           _sosTriggered = false;
+          
+          // Start Tracking Energy
+          _energyTracker.startTracking(_isOptimizedMode);
         }
       });
 
@@ -115,6 +186,10 @@ class HomeScreenState extends State<HomeScreen> {
       });
       _speechToText.stop();
       _locationUpdateTimer?.cancel();
+      
+      // Stop Tracking Energy and Save Session
+      _energyTracker.stopTracking().then((_) => _refreshEnergyMetrics());
+      
       _showSnackBar('Services turned OFF', Colors.orange);
     }
   }
@@ -279,6 +354,13 @@ class HomeScreenState extends State<HomeScreen> {
       _isActivated = true;
       _isListening = false;
       _speechToText.stop();
+      
+      // ⚡ AUTO-OVERRIDE: Force Optimized Mode OFF for Emergency
+      if (_isOptimizedMode) {
+        _isOptimizedMode = false;
+        logger.w("⚡ EMERGENCY: Optimized Mode Auto-Disabled for Max Precision");
+      }
+      
       _detectedEmotionDisplay = 'Analyzing...';
       _currentReportId = FirebaseFirestore.instance.collection('sos_reports').doc().id; 
     });
@@ -424,7 +506,15 @@ class HomeScreenState extends State<HomeScreen> {
       setState(() {
         _isLocationEnabled = true;
       });
-      logger.i("🎯 Location Services Enabled");
+      
+      // Apply Optimized Mode setting to Location Hardware
+      await location.changeSettings(
+        accuracy: _isOptimizedMode ? LocationAccuracy.balanced : LocationAccuracy.high,
+        interval: _isOptimizedMode ? 10000 : 3000,
+        distanceFilter: _isOptimizedMode ? 20 : 5,
+      );
+      
+      logger.i("🎯 Location Services Enabled (Optimized: $_isOptimizedMode)");
     } catch (e) {
       logger.e("Location error: $e");
       _isLocationEnabled = false;
@@ -501,7 +591,7 @@ class HomeScreenState extends State<HomeScreen> {
       final Location location = Location();
       logger.d("📍 Fetching precise coordinates...");
       final LocationData currentLocation = await location.getLocation().timeout(
-        isRecurring ? const Duration(seconds: 15) : const Duration(seconds: 10)
+        (isRecurring || _isOptimizedMode) ? const Duration(seconds: 15) : const Duration(seconds: 10)
       );
       
       if (currentLocation.latitude != null && currentLocation.longitude != null) {
@@ -715,7 +805,139 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildAppBar() {
+  Widget _buildDrawer() {
+    return Drawer(
+      backgroundColor: Colors.black,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(right: BorderSide(color: Colors.white.withOpacity(0.05))),
+        ),
+        child: Column(
+          children: [
+            _buildDrawerHeader(),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  _drawerItem(Icons.person_rounded, 'YOUR PROFILE', () => _navigateTo(const YourProfileScreen())),
+                  _drawerItem(Icons.history_rounded, 'SOS HISTORY', () => _navigateTo(const SosHistoryScreen())),
+                  _drawerItem(Icons.security_rounded, 'SET CODE WORD', () => _navigateTo(const SetCodeWordScreen())),
+                  _drawerItem(Icons.contacts_rounded, 'EMERGENCY CONTACTS', () => _navigateTo(const AddEmergencyContactsScreen())),
+                  _drawerItem(Icons.admin_panel_settings_rounded, 'POLICE DASHBOARD', () => _navigateTo(const PoliceDashboardScreen())),
+                  const Divider(color: Colors.white10, indent: 20, endIndent: 20),
+                  
+                  // ⚡ SYSTEM HEALTH & OPTIMIZATION SECTION
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'SYSTEM HEALTH',
+                          style: GoogleFonts.outfit(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+                        ),
+                        const SizedBox(height: 15),
+                        _buildOptimizationToggle(),
+                        const SizedBox(height: 20),
+                        _buildEnergyReportCard(),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _drawerItem(Icons.logout_rounded, 'SIGN OUT', _handleSignOut, isDestructive: true),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOptimizationToggle() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _isOptimizedMode ? Colors.green.withOpacity(0.05) : Colors.white.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: _isOptimizedMode ? Colors.green.withOpacity(0.2) : Colors.white.withOpacity(0.05)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.eco_rounded, color: _isOptimizedMode ? Colors.green : Colors.white38, size: 20),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('ECO-GUARDIAN', style: GoogleFonts.outfit(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                  Text('Active Power Saving', style: GoogleFonts.outfit(color: Colors.white38, fontSize: 9)),
+                ],
+              ),
+            ],
+          ),
+          Switch(
+            value: _isOptimizedMode,
+            onChanged: (val) {
+              setState(() => _isOptimizedMode = val);
+              if (_servicesReady) {
+                 // Restart services to apply new power settings
+                 _toggleServices(false).then((_) => _toggleServices(true));
+              }
+            },
+            activeColor: Colors.green,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEnergyReportCard() {
+    final double mah = _energyMetrics['totalMah'] ?? 0.0;
+    final double pct = _energyMetrics['batteryPercent'] ?? 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.bolt_rounded, color: Colors.amber.shade400, size: 16),
+              const SizedBox(width: 8),
+              Text('24H CONSUMPTION', style: GoogleFonts.outfit(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${mah.toStringAsFixed(2)} mAh', style: GoogleFonts.outfit(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text('Power Used', style: GoogleFonts.outfit(color: Colors.white38, fontSize: 9)),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('${pct.toStringAsFixed(3)}%', style: GoogleFonts.outfit(color: Colors.blue.shade300, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text('Battery Impact', style: GoogleFonts.outfit(color: Colors.white38, fontSize: 9)),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Row(
