@@ -455,7 +455,7 @@ app.post('/analyze-emotion', async (req, res) => {
 // --- SERVER START ---
 server.listen(PORT, () => {
     console.log(`///////////////////////////////////////////////////`);
-    console.log(`SOS GUARDIAN COMMAND CENTER (v2.0 Persistence)`);
+    console.log(`SOS GUARDIAN COMMAND CENTER (${DEPLOY_DATE})`);
     console.log(`Listening on Port: ${PORT}`);
     console.log(`Available at: http://localhost:${PORT}`);
     console.log(`///////////////////////////////////////////////////`);
