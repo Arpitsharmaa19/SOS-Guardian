@@ -299,24 +299,33 @@ const performAnalysis = (message, codeword) => {
 
 // 1. Victim Endpoint: Broadcast Signal to HQ
 app.post('/report-sos', async (req, res) => {
-    const { reportId, userId, userName, userPhone, userEmail, userAddress, userBlood, userPhoto, message, codeword, lat, lng, locationLink } = req.body;
+    const { 
+        reportId, userId, userName, userPhone, userEmail, 
+        userAddress, userBlood, userPhoto, message, 
+        codeword, lat, lng, locationLink, contacts 
+    } = req.body;
     
     const rid = reportId || `R-${Date.now()}`;
     if (!rid) return res.status(400).json({ error: 'Missing Identity' });
 
-    console.log(`📡 HQ SIGNAL: SOS recieved from ${userName} [Report ID: ${rid}]`);
+    console.log(`📡 HQ SIGNAL: SOS received from ${userName} [Report ID: ${rid}]`);
     
-    // PERFORM IMMEDIATE ANALYSIS UPON REIEPT
+    // PERFORM IMMEDIATE ANALYSIS UPON RECEIPT
     const analysis = performAnalysis(message, codeword);
     const finalEmotion = analysis.emotion;
+
+    // Build a reliable location link if none provided but coords exist
+    const finalLocationLink = locationLink && locationLink !== 'Unknown' 
+        ? locationLink 
+        : (lat && lng ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}` : 'Location Unavailable');
 
     try {
         const report = await SOSReport.findOneAndUpdate(
             { reportId: rid },
             { 
                 reportId: rid, userId, userName, userPhone, userEmail, userAddress, userBlood, userPhoto, 
-                emotion: finalEmotion, // INSTANT EMOTION FOR HISTORY
-                lat, lng, locationLink,
+                emotion: finalEmotion, 
+                lat, lng, locationLink: finalLocationLink,
                 status: 'active' 
             },
             { upsert: true, new: true }
@@ -327,21 +336,38 @@ app.post('/report-sos', async (req, res) => {
 
         // --- DISPATCH ALERTS (Twilio/WhatsApp/Email) ---
         const victimName = (userName || 'A Citizen').toUpperCase();
-        const alertMsg = `🆘 SOS! EMERGENCY DETECTED!
+        const alertMsg = `🚨 SOS EMERGENCY ALERT 🚨
+        
 Victim: ${victimName}
-Location: ${locationLink || 'Unknown'}
 Situation: ${finalEmotion}
-Context: ${message || 'Voice Triggered'}`;
+Context: ${message || 'Voice Triggered'}
 
-        // 1. Alert Emergency Contacts (SMS + WhatsApp)
-        if (userPhone && client) {
-            // SMS backup
-            client.messages.create({ body: alertMsg, to: userPhone, from: voiceNumber })
-                .catch(e => console.error("Alert SMS fail:", e.message));
+📍 LIVE LOCATION:
+${finalLocationLink}`;
 
-            // WhatsApp Priority
-            client.messages.create({ body: alertMsg, from: whatsappNumber, to: `whatsapp:${userPhone}` })
-                .catch(e => console.error("Alert WhatsApp fail:", e.message));
+        // 1. Alert Emergency Contacts (If provided in payload)
+        if (contacts && Array.isArray(contacts) && client) {
+            console.log(`📱 Dispatching alerts to ${contacts.length} contacts...`);
+            for (const contact of contacts) {
+                const targetPhone = cleanPhoneNumber(contact.phone || contact);
+                if (!targetPhone) continue;
+
+                // SMS Dispatch
+                client.messages.create({ body: alertMsg, to: targetPhone, from: voiceNumber })
+                    .then(m => console.log(`✅ SMS Sent to ${targetPhone}`))
+                    .catch(e => {
+                        console.error(`❌ SMS FAILED for ${targetPhone}: ${e.message}`);
+                        logError(`SMS to ${targetPhone} FAILED: ${e.message}`);
+                    });
+
+                // WhatsApp Dispatch
+                client.messages.create({ body: alertMsg, from: whatsappNumber, to: `whatsapp:${targetPhone}` })
+                    .then(m => console.log(`✅ WhatsApp Sent to ${targetPhone}`))
+                    .catch(e => {
+                        console.error(`❌ WA FAILED for ${targetPhone}: ${e.message}`);
+                        logError(`WA to ${targetPhone} FAILED: ${e.message}`);
+                    });
+            }
         }
 
         // 2. Alert Priority (Police/Guardian Email)
@@ -350,16 +376,17 @@ Context: ${message || 'Voice Triggered'}`;
                 .catch(e => console.error("Alert Email fail:", e.message));
         }
 
-        // 3. Initiate Tactical Call with Immediate Context
+        // 3. Optional: Tactical Call to Victim (Can be disabled if annoying)
         if (userPhone && client) {
+            const victimCleanPhone = cleanPhoneNumber(userPhone);
             client.calls.create({
-                twiml: `<Response><Say voice="Polly.Joanna">Emergency, Emergency. SOS alert from ${victimName}. Situation is categorized as ${finalEmotion}. Please check your phone for live location.</Say></Response>`,
-                to: userPhone,
+                twiml: `<Response><Say voice="Polly.Joanna">Emergency alert triggered. Dispatching help to your location. Stay on the line if possible.</Say></Response>`,
+                to: victimCleanPhone,
                 from: voiceNumber.replace('whatsapp:', '')
-            }).catch(e => console.error("Alert Call fail:", e.message));
+            }).catch(e => console.error("Victim Call fail:", e.message));
         }
 
-        res.json({ success: true, reportId: rid, emotion: finalEmotion });
+        res.json({ success: true, reportId: rid, emotion: finalEmotion, location: finalLocationLink });
     } catch (err) {
         console.error("Save Error:", err.message);
         res.status(500).json({ error: `Save failed: ${err.message}` });

@@ -38,6 +38,18 @@
       "languageVersion": "2.18"
     },
     {
+      "name": "battery_plus",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/battery_plus-7.0.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
+      "name": "battery_plus_platform_interface",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/battery_plus_platform_interface-2.0.1",
+      "packageUri": "lib/",
+      "languageVersion": "2.18"
+    },
+    {
       "name": "boolean_selector",
       "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/boolean_selector-2.1.1",
       "packageUri": "lib/",
@@ -114,6 +126,12 @@
       "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/cupertino_icons-1.0.8",
       "packageUri": "lib/",
       "languageVersion": "3.1"
+    },
+    {
+      "name": "dbus",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/dbus-0.7.12",
+      "packageUri": "lib/",
+      "languageVersion": "2.17"
     },
     {
       "name": "email_validator",
@@ -696,6 +714,12 @@
       "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/universal_io-2.2.2",
       "packageUri": "lib/",
       "languageVersion": "2.17"
+    },
+    {
+      "name": "upower",
+      "rootUri": "file:///Users/SS/.pub-cache/hosted/pub.dev/upower-0.7.0",
+      "packageUri": "lib/",
+      "languageVersion": "2.14"
     },
     {
       "name": "url_launcher",

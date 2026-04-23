@@ -287,15 +287,9 @@ class HomeScreenState extends State<HomeScreen> {
 
   void _startRecurringUpdates() {
     _locationUpdateTimer?.cancel();
-    logger.i("⏳ Starting 3-minute recurring update timer...");
-    _locationUpdateTimer = Timer.periodic(const Duration(minutes: 3), (timer) {
-      if (_isActivated) {
-        logger.i("🕒 3-Minute Cycle Reached: Sending location update...");
-        _sendSOSMessages(isRecurring: true, emotion: _lastDetectedEmotion); // Pass the last detected emotion
-      } else {
-        logger.i("⏹️ SOS Deactivated: Stopping recurring updates.");
-        timer.cancel();
-      }
+    logger.i("⏳ Starting 1-minute recurring update timer...");
+    _sosTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      _sendSOSMessages(isRecurring: true, emotion: _detectedEmotionDisplay);
     });
   }
 
@@ -599,19 +593,19 @@ class HomeScreenState extends State<HomeScreen> {
         currentLat = currentLocation.latitude;
         currentLng = currentLocation.longitude;
         locationLink = 'https://www.google.com/maps/search/?api=1&query=${currentLocation.latitude},${currentLocation.longitude}';
-        logger.i("✅ Precise Location Lat: ${currentLocation.latitude}, Lng: ${currentLocation.longitude}");
+        logger.i("📍 Precise Loc Acquired: $currentLat, $currentLng");
       }
     } catch (e) {
-      logger.w("⚠️ Precise location fetch timed out or failed: $e. Falling back to last known if possible.");
+      logger.e("Precise location fetch failed: $e. Using fallback.");
       try {
-        final lastLoc = await Location().getLocation().timeout(const Duration(seconds: 3)); 
-        if (lastLoc.latitude != null && lastLoc.longitude != null) {
-           currentLat = lastLoc.latitude;
-           currentLng = lastLoc.longitude;
-           locationLink = 'https://www.google.com/maps/search/?api=1&query=${lastLoc.latitude},${lastLoc.longitude}';
+        final lastLoc = await Location().getLocation();
+        currentLat = lastLoc.latitude;
+        currentLng = lastLoc.longitude;
+        if (currentLat != null) {
+           locationLink = 'https://www.google.com/maps/search/?api=1&query=$currentLat,$currentLng';
         }
-      } catch (_) {
-         logger.e("💀 Could not determine location at all.");
+      } catch (inner) {
+        debugPrint("Complete location failure: $inner");
       }
     }
 
@@ -647,6 +641,20 @@ class HomeScreenState extends State<HomeScreen> {
       'status': 'active',
     }, SetOptions(merge: true));
 
+    // --- Prepare Contacts for Backend Dispatch ---
+    List<Map<String, String>> contactsForBackend = [];
+    for (final name in contactsList) {
+      final data = (contactsMap != null) ? contactsMap[name] : null;
+      String? p;
+      if (data is Map) p = data['phone']?.toString();
+      else if (contactsMap == null) p = name;
+      else p = data?.toString();
+
+      if (p != null && p.isNotEmpty) {
+        contactsForBackend.add({'name': name, 'phone': p});
+      }
+    }
+
     // --- 💎 NEW: COMMAND CENTER SYNC (MONGODB + PRIVATE API) ---
     // This bypasses Firebase Security Rules and ensures persistent storage
     try {
@@ -665,11 +673,12 @@ class HomeScreenState extends State<HomeScreen> {
           'userAddress': userAddress,
           'userBlood': userBlood,
           'userPhoto': userPhoto,
-          'message': _text, // SEND RAW SPEECH FOR IMMEDIATE ANALYSIS
+          'message': _text, 
           'codeword': localCodeword,
           'lat': currentLat ?? 0.0,
           'lng': currentLng ?? 0.0,
           'locationLink': locationLink,
+          'contacts': contactsForBackend, // PASS ALL CONTACTS TO BACKEND
         }),
       ).timeout(const Duration(seconds: 5)).catchError((e) {
           debugPrint("API POST Failed: $e");
