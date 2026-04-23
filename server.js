@@ -76,6 +76,8 @@ app.get('/status', (req, res) => {
         status: 'online',
         version: DEPLOY_DATE,
         twilioReady: !!client,
+        sidPrefix: process.env.TWILIO_ACCOUNT_SID ? process.env.TWILIO_ACCOUNT_SID.substring(0, 4) : 'none',
+        tokenPrefix: process.env.TWILIO_AUTH_TOKEN ? process.env.TWILIO_AUTH_TOKEN.substring(0, 4) : 'none',
         whatsappSender: whatsappNumber,
         recentErrors: recentErrors, // Exposed for debugging
         timestamp: new Date().toISOString()
