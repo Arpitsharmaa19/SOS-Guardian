@@ -98,6 +98,11 @@ app.post('/make-call', async (req, res) => {
         return res.status(500).json({ success: false, error: 'Twilio Client not initialized' });
     }
 
+    if (!to) {
+        console.error('❌ ERROR: No recipient phone number provided.');
+        return res.status(400).json({ success: false, error: 'Recipient phone number is required' });
+    }
+
     let cleanTo = to.trim().replace(/\s+/g, '').replace(/-/g, '');
     if (!cleanTo.startsWith('+')) {
         if (cleanTo.length === 10) {
@@ -120,6 +125,9 @@ app.post('/make-call', async (req, res) => {
         res.status(200).json({ success: true, sid: call.sid });
     } catch (error) {
         console.error(`❌ TWILIO CALL ERROR: ${error.message}`);
+        if (error.message.includes('unverified')) {
+            console.warn('💡 HINT: Recipient number is not verified in Twilio Trial Account. Calls can only be made to verified numbers.');
+        }
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -139,27 +147,50 @@ app.post('/send-sms', async (req, res) => {
     console.log(`[Request] Sending SMS to: ${cleanTo}`);
 
     try {
-        // --- High-Reliability Dual Dispatch (SMS + WhatsApp) ---
+        // --- High-Reliability Independent Dispatch (SMS + WhatsApp) ---
         
-        // 1. Regular SMS (Good as a backup)
-        const sms = await client.messages.create({
-            body: message,
-            to: cleanTo,
-            from: voiceNumber
-        });
-        console.log(`✅ SMS SUCCESS SID: ${sms.sid}`);
+        let smsSid = 'skipped';
+        let waSid = 'skipped';
 
-        // 2. WhatsApp Message (Most reliable for India)
-        const whatsapp = await client.messages.create({
-            body: message,
-            from: whatsappNumber, 
-            to: `whatsapp:${cleanTo}`
-        });
-        console.log(`✅ WHATSAPP SUCCESS SID: ${whatsapp.sid}`);
+        // 1. Regular SMS Dispatch
+        try {
+            const sms = await client.messages.create({
+                body: message,
+                to: cleanTo,
+                from: voiceNumber
+            });
+            smsSid = sms.sid;
+            console.log(`✅ SMS SUCCESS SID: ${smsSid}`);
+        } catch (smsErr) {
+            console.error(`❌ SMS FAILED: ${smsErr.message}`);
+            if (smsErr.message.includes('unverified')) {
+                console.warn('💡 HINT: Recipient number is not verified in Twilio Trial Account.');
+            }
+        }
 
-        res.status(200).json({ success: true, smsSid: sms.sid, waSid: whatsapp.sid });
+        // 2. WhatsApp Dispatch
+        try {
+            const whatsapp = await client.messages.create({
+                body: message,
+                from: whatsappNumber, 
+                to: `whatsapp:${cleanTo}`
+            });
+            waSid = whatsapp.sid;
+            console.log(`✅ WHATSAPP SUCCESS SID: ${waSid}`);
+        } catch (waErr) {
+            console.error(`❌ WHATSAPP FAILED: ${waErr.message}`);
+            if (waErr.message.includes('not opted in')) {
+                console.warn('💡 HINT: Recipient has not sent "join <keyword>" to the WhatsApp sandbox number.');
+            }
+        }
+
+        res.status(200).json({ 
+            success: smsSid !== 'skipped' || waSid !== 'skipped', 
+            smsSid, 
+            waSid 
+        });
     } catch (error) {
-        console.error(`❌ DISPATCH ERROR: ${error.message}`);
+        console.error(`❌ DISPATCH CRITICAL ERROR: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
 });

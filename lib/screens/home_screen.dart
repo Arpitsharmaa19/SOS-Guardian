@@ -12,6 +12,7 @@ import 'set_code_word_screen.dart';
 import 'add_emergency_contacts.dart';
 import 'login_screen.dart';
 import 'sos_history_screen.dart';
+import 'police_dashboard_screen.dart';
 import 'package:location/location.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -707,6 +708,9 @@ class HomeScreenState extends State<HomeScreen> {
         if (contactData is Map) {
           phone = contactData['phone']?.toString();
           email = contactData['email']?.toString();
+        } else if (contactsMap == null) {
+          // If contactsMap is null, contactName IS the phone number (from List)
+          phone = contactName;
         } else {
           phone = contactData?.toString();
         }
@@ -819,11 +823,31 @@ class HomeScreenState extends State<HomeScreen> {
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  _drawerItem(Icons.person_rounded, 'YOUR PROFILE', () => _navigateTo(const YourProfileScreen())),
-                  _drawerItem(Icons.history_rounded, 'SOS HISTORY', () => _navigateTo(const SosHistoryScreen())),
-                  _drawerItem(Icons.security_rounded, 'SET CODE WORD', () => _navigateTo(const SetCodeWordScreen())),
-                  _drawerItem(Icons.contacts_rounded, 'EMERGENCY CONTACTS', () => _navigateTo(const AddEmergencyContactsScreen())),
-                  _drawerItem(Icons.admin_panel_settings_rounded, 'POLICE DASHBOARD', () => _navigateTo(const PoliceDashboardScreen())),
+                  _drawerItem(
+                    icon: Icons.person_rounded, 
+                    title: 'YOUR PROFILE', 
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const YourProfileScreen())),
+                  ),
+                   _drawerItem(
+                    icon: Icons.history_rounded, 
+                    title: 'SOS HISTORY', 
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => SOSHistoryScreen())),
+                  ),
+                  _drawerItem(
+                    icon: Icons.security_rounded, 
+                    title: 'SET CODE WORD', 
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SetCodeWordScreen())),
+                  ),
+                  _drawerItem(
+                    icon: Icons.contacts_rounded, 
+                    title: 'EMERGENCY CONTACTS', 
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AddEmergencyContactsScreen())),
+                  ),
+                  _drawerItem(
+                    icon: Icons.admin_panel_settings_rounded, 
+                    title: 'POLICE DASHBOARD', 
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => PoliceDashboardScreen())),
+                  ),
                   const Divider(color: Colors.white10, indent: 20, endIndent: 20),
                   
                   // ⚡ SYSTEM HEALTH & OPTIMIZATION SECTION
@@ -846,7 +870,15 @@ class HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            _drawerItem(Icons.logout_rounded, 'SIGN OUT', _handleSignOut, isDestructive: true),
+            _drawerItem(
+              icon: Icons.logout_rounded, 
+              title: 'SIGN OUT', 
+              textColor: AppTheme.emergencyColor,
+              onTap: () {
+                FirebaseAuth.instance.signOut();
+                Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginScreen()), (route) => false);
+              },
+            ),
             const SizedBox(height: 20),
           ],
         ),
@@ -938,6 +970,7 @@ class HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+  Widget _buildAppBar() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Row(
@@ -1252,80 +1285,6 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
 
-  Widget _buildDrawer() {
-    return Drawer(
-      backgroundColor: const Color(0xFF040608),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border(right: BorderSide(color: Colors.white.withOpacity(0.05))),
-        ),
-        child: Column(
-          children: [
-            _buildDrawerHeader(),
-            const SizedBox(height: 20),
-            _drawerItem(
-              icon: Icons.person_rounded,
-              title: 'MY PROFILE',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const YourProfileScreen())),
-            ),
-            _drawerItem(
-              icon: Icons.vpn_key_rounded,
-              title: 'CODE WORDS',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SetCodeWordScreen())),
-            ),
-            _drawerItem(
-              icon: Icons.contacts_rounded,
-              title: 'EMERGENCY CONTACTS',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AddEmergencyContactsScreen())),
-            ),
-            _drawerItem(
-              icon: Icons.history_rounded,
-              title: 'INCIDENT LOGS',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SOSHistoryScreen())),
-            ),
-            _drawerItem(
-              icon: Icons.electrical_services_rounded,
-              title: 'SYSTEM TEST',
-              onTap: () {
-                 Navigator.pop(context);
-                 _testBackendConnection();
-              },
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20.0),
-              child: Divider(color: Colors.white10),
-            ),
-            _drawerItem(
-              icon: Icons.logout_rounded,
-              title: 'OFFLINE / LOGOUT',
-              textColor: AppTheme.emergencyColor,
-              onTap: () {
-                FirebaseAuth.instance.signOut();
-                Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginScreen()), (route) => false);
-              },
-            ),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                children: [
-                  Container(
-                    width: 8, height: 8,
-                    decoration: const BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'SOS GUARDIAN v1.0 PRO',
-                    style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildDrawerHeader() {
     final user = FirebaseAuth.instance.currentUser;
