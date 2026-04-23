@@ -12,9 +12,12 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 const PORT = process.env.PORT || 10000;
+const DEPLOY_DATE = "2026-04-24 (v2.1 Diagnostics)";
 
 app.use(cors());
 app.use(bodyParser.json());
+
+console.log(`🚀 DEPLOYMENT VERSION: ${DEPLOY_DATE}`);
 
 // Global Request Logger
 app.use((req, res, next) => {
