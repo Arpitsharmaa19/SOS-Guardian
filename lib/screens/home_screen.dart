@@ -1308,7 +1308,7 @@ class HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   Text(
-                    _isActivated ? "Real-time updates sending every 3 mins..." : (_text.isEmpty ? "Waiting for speech..." : _text),
+                    _isActivated ? "Real-time updates sending every 1 min..." : (_text.isEmpty ? "Waiting for speech..." : _text),
                     style: TextStyle(
                       color: _text.isEmpty && !_isActivated ? Colors.white24 : Colors.white,
                       fontSize: 18,
