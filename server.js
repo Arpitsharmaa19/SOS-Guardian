@@ -12,10 +12,16 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 const PORT = process.env.PORT || 10000;
-const DEPLOY_DATE = "2026-04-24 (v2.1 Diagnostics)";
+const DEPLOY_DATE = "2026-04-24 (v2.2 Debug Logs)";
+let recentErrors = []; // Track recent Twilio errors for remote debugging
 
 app.use(cors());
 app.use(bodyParser.json());
+
+const logError = (msg) => {
+    recentErrors.unshift(`[${new Date().toISOString()}] ${msg}`);
+    if (recentErrors.length > 5) recentErrors.pop();
+};
 
 console.log(`🚀 DEPLOYMENT VERSION: ${DEPLOY_DATE}`);
 
@@ -71,6 +77,7 @@ app.get('/status', (req, res) => {
         version: DEPLOY_DATE,
         twilioReady: !!client,
         whatsappSender: whatsappNumber,
+        recentErrors: recentErrors, // Exposed for debugging
         timestamp: new Date().toISOString()
     });
 });
@@ -166,6 +173,7 @@ app.post('/make-call', async (req, res) => {
         res.status(200).json({ success: true, sid: call.sid });
     } catch (error) {
         console.error(`❌ TWILIO CALL ERROR [${error.code}]: ${error.message}`);
+        logError(`CALL to ${cleanTo} FAILED [${error.code}]: ${error.message}`);
         let hint = "";
         if (error.code === 21608) hint = "Recipient number is unverified in Twilio Trial Account.";
         if (error.code === 21211) hint = "Invalid 'To' phone number.";
@@ -202,6 +210,7 @@ app.post('/send-sms', async (req, res) => {
             console.log(`✅ SMS SUCCESS SID: ${smsSid}`);
         } catch (smsErr) {
             console.error(`❌ SMS FAILED: ${smsErr.message}`);
+            logError(`SMS to ${cleanTo} FAILED: ${smsErr.message}`);
             errors.push(`SMS: ${smsErr.message}`);
         }
 
@@ -216,6 +225,7 @@ app.post('/send-sms', async (req, res) => {
             console.log(`✅ WHATSAPP SUCCESS SID: ${waSid}`);
         } catch (waErr) {
             console.error(`❌ WHATSAPP FAILED [${waErr.code}]: ${waErr.message}`);
+            logError(`WA to ${cleanTo} FAILED [${waErr.code}]: ${waErr.message}`);
             let waHint = "";
             if (waErr.code === 63003) waHint = "Recipient has not joined the WhatsApp sandbox.";
             if (waErr.code === 21608) waHint = "Number unverified in Trial account.";
