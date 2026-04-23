@@ -28,6 +28,7 @@ console.log('PORT:', process.env.PORT);
 console.log('TWILIO_ACCOUNT_SID:', process.env.TWILIO_ACCOUNT_SID ? 'EXISTS' : 'MISSING');
 console.log('TWILIO_AUTH_TOKEN:', process.env.TWILIO_AUTH_TOKEN ? 'EXISTS' : 'MISSING');
 console.log('TWILIO_PHONE_NUMBER:', process.env.TWILIO_PHONE_NUMBER);
+console.log('TWILIO_WHATSAPP_NUMBER:', process.env.TWILIO_WHATSAPP_NUMBER || 'NOT SET (Defaulting to sandbox or voice number)');
 console.log('EMAIL_USER:', process.env.EMAIL_USER ? 'EXISTS' : 'MISSING');
 console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'EXISTS' : 'MISSING');
 
@@ -35,7 +36,8 @@ console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'EXISTS' : 'MISSING');
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const voiceNumber = process.env.TWILIO_PHONE_NUMBER;
-const whatsappNumber = process.env.TWILIO_WHATSAPP_NUMBER || `whatsapp:${voiceNumber}`;
+// Default to Twilio Sandbox number if not provided
+const whatsappNumber = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
 
 let client;
 if (accountSid && authToken && accountSid.startsWith('AC')) {
@@ -64,8 +66,26 @@ app.get('/status', (req, res) => {
     res.json({
         status: 'online',
         twilioReady: !!client,
+        whatsappSender: whatsappNumber,
         timestamp: new Date().toISOString()
     });
+});
+
+// Diagnostic endpoint to check Twilio
+app.get('/test-twilio', async (req, res) => {
+    if (!client) return res.status(500).json({ error: 'Twilio not initialized' });
+    try {
+        const account = await client.api.v2010.accounts(accountSid).fetch();
+        res.json({ 
+            success: true, 
+            accountStatus: account.status, 
+            type: account.type,
+            whatsappSender: whatsappNumber,
+            hint: "Ensure you sent 'join <sandbox-keyword>' to " + whatsappNumber.replace('whatsapp:', '')
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
 });
 
 app.post('/send-email', async (req, res) => {
@@ -90,6 +110,30 @@ app.post('/send-email', async (req, res) => {
     }
 });
 
+/**
+ * Robust Phone Number Cleaner
+ * Handles: Spaces, Dashes, Leading Zeros, Missing Country Codes
+ */
+const cleanPhoneNumber = (number) => {
+    if (!number) return null;
+    let clean = number.toString().trim().replace(/\s+/g, '').replace(/-/g, '').replace(/\(/g, '').replace(/\)/g, '');
+    
+    // Handle leading zero (common in some regions)
+    if (clean.startsWith('0') && !clean.startsWith('00')) {
+        clean = clean.substring(1);
+    }
+
+    if (!clean.startsWith('+')) {
+        // Default to India if 10 digits
+        if (clean.length === 10) {
+            clean = '+91' + clean;
+        } else {
+            clean = '+' + clean;
+        }
+    }
+    return clean;
+};
+
 app.post('/make-call', async (req, res) => {
     const { to, message } = req.body;
 
@@ -98,19 +142,12 @@ app.post('/make-call', async (req, res) => {
         return res.status(500).json({ success: false, error: 'Twilio Client not initialized' });
     }
 
-    if (!to) {
+    const cleanTo = cleanPhoneNumber(to);
+    if (!cleanTo) {
         console.error('❌ ERROR: No recipient phone number provided.');
         return res.status(400).json({ success: false, error: 'Recipient phone number is required' });
     }
-
-    let cleanTo = to.trim().replace(/\s+/g, '').replace(/-/g, '');
-    if (!cleanTo.startsWith('+')) {
-        if (cleanTo.length === 10) {
-            cleanTo = '+91' + cleanTo;
-        } else {
-            cleanTo = '+' + cleanTo;
-        }
-    }
+    
     const fromNumber = voiceNumber.replace('whatsapp:', '');
 
     console.log(`[Request] Initiating Call to: ${cleanTo} from ${fromNumber}`);
@@ -124,11 +161,12 @@ app.post('/make-call', async (req, res) => {
         console.log(`✅ CALL SUCCESS SID: ${call.sid}`);
         res.status(200).json({ success: true, sid: call.sid });
     } catch (error) {
-        console.error(`❌ TWILIO CALL ERROR: ${error.message}`);
-        if (error.message.includes('unverified')) {
-            console.warn('💡 HINT: Recipient number is not verified in Twilio Trial Account. Calls can only be made to verified numbers.');
-        }
-        res.status(500).json({ success: false, error: error.message });
+        console.error(`❌ TWILIO CALL ERROR [${error.code}]: ${error.message}`);
+        let hint = "";
+        if (error.code === 21608) hint = "Recipient number is unverified in Twilio Trial Account.";
+        if (error.code === 21211) hint = "Invalid 'To' phone number.";
+        
+        res.status(500).json({ success: false, error: error.message, hint });
     }
 });
 
@@ -139,18 +177,15 @@ app.post('/send-sms', async (req, res) => {
         return res.status(500).json({ success: false, error: 'Twilio Client not initialized' });
     }
 
-    let cleanTo = to.trim().replace(/\s+/g, '').replace(/-/g, '');
-    if (!cleanTo.startsWith('+')) {
-        cleanTo = (cleanTo.length === 10) ? '+91' + cleanTo : '+' + cleanTo;
-    }
+    const cleanTo = cleanPhoneNumber(to);
+    if (!cleanTo) return res.status(400).json({ success: false, error: 'Invalid number' });
 
-    console.log(`[Request] Sending SMS to: ${cleanTo}`);
+    console.log(`[Request] Dispatching Alert to: ${cleanTo} (SMS & WhatsApp)`);
 
     try {
-        // --- High-Reliability Independent Dispatch (SMS + WhatsApp) ---
-        
         let smsSid = 'skipped';
         let waSid = 'skipped';
+        let errors = [];
 
         // 1. Regular SMS Dispatch
         try {
@@ -163,9 +198,7 @@ app.post('/send-sms', async (req, res) => {
             console.log(`✅ SMS SUCCESS SID: ${smsSid}`);
         } catch (smsErr) {
             console.error(`❌ SMS FAILED: ${smsErr.message}`);
-            if (smsErr.message.includes('unverified')) {
-                console.warn('💡 HINT: Recipient number is not verified in Twilio Trial Account.');
-            }
+            errors.push(`SMS: ${smsErr.message}`);
         }
 
         // 2. WhatsApp Dispatch
@@ -178,16 +211,18 @@ app.post('/send-sms', async (req, res) => {
             waSid = whatsapp.sid;
             console.log(`✅ WHATSAPP SUCCESS SID: ${waSid}`);
         } catch (waErr) {
-            console.error(`❌ WHATSAPP FAILED: ${waErr.message}`);
-            if (waErr.message.includes('not opted in')) {
-                console.warn('💡 HINT: Recipient has not sent "join <keyword>" to the WhatsApp sandbox number.');
-            }
+            console.error(`❌ WHATSAPP FAILED [${waErr.code}]: ${waErr.message}`);
+            let waHint = "";
+            if (waErr.code === 63003) waHint = "Recipient has not joined the WhatsApp sandbox.";
+            if (waErr.code === 21608) waHint = "Number unverified in Trial account.";
+            errors.push(`WhatsApp: ${waErr.message} ${waHint}`);
         }
 
         res.status(200).json({ 
             success: smsSid !== 'skipped' || waSid !== 'skipped', 
             smsSid, 
-            waSid 
+            waSid,
+            errors: errors.length > 0 ? errors : undefined
         });
     } catch (error) {
         console.error(`❌ DISPATCH CRITICAL ERROR: ${error.message}`);

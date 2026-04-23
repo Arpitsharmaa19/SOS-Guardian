@@ -862,6 +862,8 @@ class HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 15),
                         _buildOptimizationToggle(),
+                        const SizedBox(height: 12),
+                        _buildDiagnosticButton(), // Added diagnostic button
                         const SizedBox(height: 20),
                         _buildEnergyReportCard(),
                       ],
@@ -922,6 +924,36 @@ class HomeScreenState extends State<HomeScreen> {
             activeColor: Colors.green,
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDiagnosticButton() {
+    return InkWell(
+      onTap: _testBackendConnection,
+      borderRadius: BorderRadius.circular(15),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.02),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.analytics_outlined, color: Colors.blueAccent, size: 20),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('DIAGNOSTICS', style: GoogleFonts.outfit(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                Text('Check Backend & Twilio', style: GoogleFonts.outfit(color: Colors.white38, fontSize: 9)),
+              ],
+            ),
+            const Spacer(),
+            const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white10, size: 12),
+          ],
+        ),
       ),
     );
   }
