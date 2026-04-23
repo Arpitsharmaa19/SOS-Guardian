@@ -68,6 +68,7 @@ app.get('/', (req, res) => {
 app.get('/status', (req, res) => {
     res.json({
         status: 'online',
+        version: DEPLOY_DATE,
         twilioReady: !!client,
         whatsappSender: whatsappNumber,
         timestamp: new Date().toISOString()
