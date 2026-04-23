@@ -288,7 +288,7 @@ class HomeScreenState extends State<HomeScreen> {
   void _startRecurringUpdates() {
     _locationUpdateTimer?.cancel();
     logger.i("⏳ Starting 1-minute recurring update timer...");
-    _sosTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+    _locationUpdateTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       _sendSOSMessages(isRecurring: true, emotion: _detectedEmotionDisplay);
     });
   }
